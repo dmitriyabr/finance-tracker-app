@@ -187,70 +187,266 @@ finance_tracker = FinanceTracker()
 
 @app.route('/')
 def index():
-    """Главная страница - простой HTML"""
+    """Главная страница - полноценный HTML с графиками"""
     html = """
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Finance Tracker</title>
+        <title>Finance Tracker Pro</title>
         <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
-            body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-            .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-            .balance { font-size: 28px; color: #2c3e50; margin: 20px 0; text-align: center; }
-            .form { margin: 30px 0; padding: 20px; background: #f8f9fa; border-radius: 8px; }
-            .form h3 { margin-top: 0; color: #495057; }
-            input, select, button { padding: 12px; margin: 8px; font-size: 16px; border: 1px solid #ddd; border-radius: 5px; }
-            button { background: #007bff; color: white; border: none; cursor: pointer; transition: background 0.3s; }
-            button:hover { background: #0056b3; }
-            .upload-section { margin: 20px 0; padding: 20px; background: #e3f2fd; border-radius: 8px; }
-            .accounts { margin: 30px 0; }
-            .account { padding: 15px; border: 1px solid #e9ecef; margin: 10px 0; border-radius: 8px; background: #f8f9fa; }
-            .success { color: #28a745; font-weight: bold; }
-            .error { color: #dc3545; font-weight: bold; }
+            body { 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            }
+            .main-container { 
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                border-radius: 20px;
+                box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                margin: 20px;
+                padding: 30px;
+            }
+            .balance-card {
+                background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+                color: white;
+                border-radius: 20px;
+                padding: 30px;
+                text-align: center;
+                margin: 20px 0;
+                box-shadow: 0 10px 30px rgba(79, 172, 254, 0.3);
+            }
+            .balance-amount {
+                font-size: 3rem;
+                font-weight: bold;
+                margin: 10px 0;
+            }
+            .balance-change {
+                font-size: 1.2rem;
+                opacity: 0.9;
+            }
+            .form-section {
+                background: #f8f9fa;
+                border-radius: 15px;
+                padding: 25px;
+                margin: 20px 0;
+                border: 1px solid #e9ecef;
+            }
+            .upload-section {
+                background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+                border-radius: 15px;
+                padding: 25px;
+                margin: 20px 0;
+                border: none;
+            }
+            .btn-primary {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border: none;
+                border-radius: 25px;
+                padding: 12px 30px;
+                font-weight: 600;
+                transition: all 0.3s;
+            }
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            }
+            .btn-success {
+                background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+                border: none;
+                border-radius: 25px;
+                padding: 12px 30px;
+                font-weight: 600;
+            }
+            .account-card {
+                background: white;
+                border-radius: 15px;
+                padding: 20px;
+                margin: 15px 0;
+                border: 1px solid #e9ecef;
+                transition: all 0.3s;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            }
+            .account-card:hover {
+                transform: translateY(-3px);
+                box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            }
+            .account-name {
+                font-size: 1.2rem;
+                font-weight: 600;
+                color: #2c3e50;
+                margin-bottom: 10px;
+            }
+            .account-balance-usd {
+                font-size: 1.8rem;
+                font-weight: bold;
+                color: #27ae60;
+                margin-bottom: 5px;
+            }
+            .account-balance-local {
+                font-size: 1rem;
+                color: #7f8c8d;
+            }
+            .chart-container {
+                background: white;
+                border-radius: 15px;
+                padding: 20px;
+                margin: 20px 0;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            }
+            .success-message {
+                background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+                color: white;
+                padding: 15px;
+                border-radius: 10px;
+                margin: 15px 0;
+                text-align: center;
+                font-weight: 600;
+            }
+            .error-message {
+                background: linear-gradient(135deg, #ff6b6b 0%, #ffa5a5 100%);
+                color: white;
+                padding: 15px;
+                border-radius: 10px;
+                margin: 15px 0;
+                text-align: center;
+                font-weight: 600;
+            }
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin: 20px 0;
+            }
+            .stat-card {
+                background: white;
+                border-radius: 15px;
+                padding: 20px;
+                text-align: center;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            }
+            .stat-number {
+                font-size: 2rem;
+                font-weight: bold;
+                color: #667eea;
+            }
+            .stat-label {
+                color: #7f8c8d;
+                font-size: 0.9rem;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
         </style>
     </head>
     <body>
-        <div class="container">
-            <h1>💰 Finance Tracker</h1>
-            <div class="balance">Общий баланс: $<span id="total">0.00</span></div>
-            
-            <div class="form">
-                <h3>Добавить баланс вручную:</h3>
-                <input type="number" id="amount" placeholder="Сумма" step="0.01">
-                <select id="currency">
-                    <option value="RUB">Рубли (RUB)</option>
-                    <option value="USD">Доллары (USD)</option>
-                    <option value="EUR">Евро (EUR)</option>
-                    <option value="AED">Дирхамы (AED)</option>
-                    <option value="IDR">Рупии (IDR)</option>
-                </select>
-                <button onclick="addBalance()">Добавить</button>
-            </div>
-            
-            <div class="upload-section">
-                <h3>📱 Загрузить скриншот банковского приложения:</h3>
-                <input type="file" id="imageFile" accept="image/*">
-                <button onclick="processImage()">Распознать баланс</button>
-                <button onclick="testAPI()" style="background: #28a745;">🧪 Тест API</button>
-                <div id="imageResult"></div>
-            </div>
-            
-            <div class="accounts">
-                <h3>🏦 Ваши счета:</h3>
-                <div id="accountsList">Нет счетов</div>
+        <div class="container-fluid">
+            <div class="main-container">
+                <div class="text-center mb-4">
+                    <h1 class="display-4 fw-bold text-gradient">💰 Finance Tracker Pro</h1>
+                    <p class="lead text-muted">Умное управление финансами с AI</p>
+                </div>
+                
+                <!-- Общий баланс -->
+                <div class="balance-card">
+                    <h3>Общий баланс</h3>
+                    <div class="balance-amount">$<span id="total">0.00</span></div>
+                    <div class="balance-change" id="balanceChange"></div>
+                </div>
+                
+                <!-- Статистика -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalAccounts">0</div>
+                        <div class="stat-label">Счетов</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="totalTransactions">0</div>
+                        <div class="stat-label">Транзакций</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="lastUpdate">-</div>
+                        <div class="stat-label">Обновлено</div>
+                    </div>
+                </div>
+                
+                <!-- Форма добавления баланса -->
+                <div class="form-section">
+                    <h4>💳 Добавить баланс вручную</h4>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <input type="number" id="amount" class="form-control" placeholder="Сумма" step="0.01">
+                        </div>
+                        <div class="col-md-4">
+                            <select id="currency" class="form-select">
+                                <option value="RUB">Рубли (RUB)</option>
+                                <option value="USD">Доллары (USD)</option>
+                                <option value="EUR">Евро (EUR)</option>
+                                <option value="AED">Дирхамы (AED)</option>
+                                <option value="IDR">Рупии (IDR)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button onclick="addBalance()" class="btn btn-primary w-100">Добавить</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Загрузка скриншота -->
+                <div class="upload-section">
+                    <h4>📱 Загрузить скриншот банковского приложения</h4>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <input type="file" id="imageFile" class="form-control" accept="image/*">
+                        </div>
+                        <div class="col-md-3">
+                            <button onclick="processImage()" class="btn btn-primary w-100">Распознать</button>
+                        </div>
+                        <div class="col-md-3">
+                            <button onclick="testAPI()" class="btn btn-success w-100">🧪 Тест API</button>
+                        </div>
+                    </div>
+                    <div id="imageResult"></div>
+                </div>
+                
+                <!-- Графики -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="chart-container">
+                            <h5>📊 Распределение по валютам</h5>
+                            <canvas id="currencyChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="chart-container">
+                            <h5>📈 Динамика общего баланса</h5>
+                            <canvas id="totalBalanceChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Счета -->
+                <div class="chart-container">
+                    <h4>🏦 Ваши счета</h4>
+                    <div id="accountsList">Нет счетов</div>
+                </div>
             </div>
         </div>
         
         <script>
             let accounts = {};
+            let currencyChart = null;
+            let totalBalanceChart = null;
             
             function addBalance() {
                 const amount = document.getElementById('amount').value;
                 const currency = document.getElementById('currency').value;
                 
                 if (!amount) {
-                    alert('Введите сумму');
+                    showMessage('Введите сумму', 'error');
                     return;
                 }
                 
@@ -278,7 +474,7 @@ def index():
                 const file = fileInput.files[0];
                 
                 if (!file) {
-                    alert('Выберите изображение');
+                    showMessage('Выберите изображение', 'error');
                     return;
                 }
                 
@@ -330,30 +526,153 @@ def index():
             
             function updateDisplay(accountsData) {
                 accounts = accountsData.accounts;
-                document.getElementById('total').textContent = accountsData.total_balance_usd.toFixed(2);
                 
+                // Обновляем общий баланс
+                document.getElementById('total').textContent = formatNumber(accountsData.total_balance_usd);
+                
+                // Обновляем статистику
+                document.getElementById('totalAccounts').textContent = accountsData.total_count;
+                document.getElementById('totalTransactions').textContent = getTotalTransactions();
+                document.getElementById('lastUpdate').textContent = formatDate(accountsData.last_updated);
+                
+                // Обновляем список счетов
+                updateAccountsList();
+                
+                // Обновляем графики
+                updateCharts();
+            }
+            
+            function updateAccountsList() {
                 const accountsList = document.getElementById('accountsList');
                 if (Object.keys(accounts).length === 0) {
-                    accountsList.innerHTML = 'Нет счетов';
+                    accountsList.innerHTML = '<p class="text-muted text-center">Нет счетов</p>';
                     return;
                 }
                 
                 let html = '';
                 for (const [id, account] of Object.entries(accounts)) {
                     html += `
-                        <div class="account">
-                            <strong>${account.name}</strong><br>
-                            ${account.balance.toFixed(2)} ${account.currency}<br>
-                            ≈ $${account.balance_usd.toFixed(2)}
+                        <div class="account-card">
+                            <div class="account-name">${account.name}</div>
+                            <div class="account-balance-usd">$${formatNumber(account.balance_usd)}</div>
+                            <div class="account-balance-local">${formatNumber(account.balance)} ${account.currency}</div>
+                            <small class="text-muted">Обновлено: ${formatDate(account.last_updated)}</small>
                         </div>
                     `;
                 }
                 accountsList.innerHTML = html;
             }
             
+            function updateCharts() {
+                updateCurrencyChart();
+                updateTotalBalanceChart();
+            }
+            
+            function updateCurrencyChart() {
+                const ctx = document.getElementById('currencyChart').getContext('2d');
+                
+                if (currencyChart) {
+                    currencyChart.destroy();
+                }
+                
+                const labels = [];
+                const data = [];
+                const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+                
+                for (const [id, account] of Object.entries(accounts)) {
+                    labels.push(account.currency);
+                    data.push(account.balance_usd);
+                }
+                
+                currencyChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: colors.slice(0, labels.length),
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+            
+            function updateTotalBalanceChart() {
+                const ctx = document.getElementById('totalBalanceChart').getContext('2d');
+                
+                if (totalBalanceChart) {
+                    totalBalanceChart.destroy();
+                }
+                
+                // Создаем демо-данные для графика
+                const labels = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг'];
+                const data = [0, 0, 0, 0, 0, 0, 0, parseFloat(document.getElementById('total').textContent)];
+                
+                totalBalanceChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Общий баланс (USD)',
+                            data: data,
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+            
+            function getTotalTransactions() {
+                let total = 0;
+                for (const account of Object.values(accounts)) {
+                    total += account.transactions ? account.transactions.length : 0;
+                }
+                return total;
+            }
+            
+            function formatNumber(num) {
+                if (num === undefined || num === null) return '0.00';
+                return parseFloat(num).toLocaleString('en-US', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
+            
+            function formatDate(dateString) {
+                if (!dateString) return '-';
+                const date = new Date(dateString);
+                return date.toLocaleDateString('ru-RU');
+            }
+            
             function showMessage(message, type) {
                 const resultDiv = document.getElementById('imageResult');
-                resultDiv.innerHTML = `<div class="${type}">${message}</div>`;
+                const className = type === 'success' ? 'success-message' : 'error-message';
+                resultDiv.innerHTML = `<div class="${className}">${message}</div>`;
                 setTimeout(() => resultDiv.innerHTML = '', 5000);
             }
             
