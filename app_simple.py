@@ -9,11 +9,24 @@ app = Flask(__name__)
 vision_client = None
 try:
     from google.cloud import vision
-    # Railway автоматически использует GOOGLE_APPLICATION_CREDENTIALS
-    vision_client = vision.ImageAnnotatorClient()
-    print("✅ Google Vision API подключен!")
+    import os
+    
+    # Проверяем credentials
+    credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    print(f"🔍 GOOGLE_APPLICATION_CREDENTIALS: {credentials_path}")
+    
+    if credentials_path and os.path.exists(credentials_path):
+        print(f"✅ Credentials файл найден: {credentials_path}")
+        vision_client = vision.ImageAnnotatorClient()
+        print("✅ Google Vision API подключен!")
+    else:
+        print(f"❌ Credentials файл не найден или не существует")
+        vision_client = None
+        
 except Exception as e:
     print(f"❌ Ошибка подключения к Google Vision: {e}")
+    import traceback
+    traceback.print_exc()
     vision_client = None
 
 class FinanceTracker:
