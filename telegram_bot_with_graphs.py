@@ -255,6 +255,30 @@ class FinanceTrackerBotWithGraphs:
         finally:
             session.close()
 
+    def get_accounts_details(self):
+        """Получает детальную информацию по всем счетам"""
+        try:
+            session = create_session()
+            accounts = session.query(Account).all()
+            
+            accounts_details = {}
+            for account in accounts:
+                accounts_details[account.id] = {
+                    'name': account.name,
+                    'currency': account.currency,
+                    'balance': account.balance,
+                    'balance_usd': account.balance_usd,
+                    'last_updated': account.last_updated.isoformat() if account.last_updated else None
+                }
+            
+            return accounts_details
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка получения деталей по счетам: {e}")
+            return {}
+        finally:
+            session.close()
+
     def create_balance_chart(self):
         """Создаем график распределения по валютам"""
         try:
@@ -584,6 +608,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     # Получаем текущие данные
     accounts_data = finance_tracker.get_accounts_summary()
+    accounts_details = finance_tracker.get_accounts_details()
     
     welcome_text = "💰 **Finance Tracker Bot с графиками**\n\n"
     
@@ -591,7 +616,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_text += f"💵 **Общий баланс: ${accounts_data['total_balance_usd']:,.2f}**\n\n"
         welcome_text += "🏦 **Ваши счета:**\n"
         
-        for account_id, account in accounts_data['accounts'].items():
+        for account_id, account in accounts_details.items():
             welcome_text += f"• {account['name']}: {account['balance']:,.2f} {account['currency']} (≈ ${account['balance_usd']:,.2f})\n"
         
         welcome_text += "\n📱 **Отправьте скриншот** для обновления баланса!"
@@ -673,9 +698,12 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📭 У вас пока нет счетов.\n\nОтправьте скриншот банковского приложения, чтобы создать первый счет!")
         return
     
+    # Получаем детали по счетам
+    accounts_details = finance_tracker.get_accounts_details()
+    
     # Создаем список счетов для выбора
     keyboard = []
-    for account_id, account in accounts_data['accounts'].items():
+    for account_id, account in accounts_details.items():
         keyboard.append([InlineKeyboardButton(
             f"📊 {account['name']} ({account['currency']})", 
             callback_data=f"history_{account_id}"
@@ -795,8 +823,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("📭 У вас пока нет счетов.\n\nОтправьте скриншот банковского приложения, чтобы создать первый счет!")
             return
         
+        # Получаем детали по счетам
+        accounts_details = finance_tracker.get_accounts_details()
+        
         keyboard = []
-        for account_id, account in accounts_data['accounts'].items():
+        for account_id, account in accounts_details.items():
             keyboard.append([InlineKeyboardButton(
                 f"📊 {account['name']} ({account['currency']})", 
                 callback_data=f"history_{account_id}"
@@ -839,29 +870,36 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chart_buffer = finance_tracker.create_account_history_chart(account_id)
         
         if chart_buffer:
-            account = finance_tracker.data['accounts'][account_id]
-            caption = f"📊 **История счета: {account['name']}**\n\n"
-            caption += f"💰 Текущий баланс: {account['balance']:,.2f} {account['currency']}\n"
-            caption += f"💵 В долларах: ${account['balance_usd']:,.2f}"
+            # Получаем информацию о счете
+            accounts_details = finance_tracker.get_accounts_details()
+            account = accounts_details.get(int(account_id))
             
-            keyboard = [
-                [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await context.bot.send_photo(
-                chat_id=query.from_user.id,
-                photo=chart_buffer,
-                caption=caption,
-                reply_markup=reply_markup
-            )
-            await query.message.delete()
+            if account:
+                caption = f"📊 **История счета: {account['name']}**\n\n"
+                caption += f"💰 Текущий баланс: {account['balance']:,.2f} {account['currency']}\n"
+                caption += f"💵 В долларах: ${account['balance_usd']:,.2f}"
+                
+                keyboard = [
+                    [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await context.bot.send_photo(
+                    chat_id=query.from_user.id,
+                    photo=chart_buffer,
+                    caption=caption,
+                    reply_markup=reply_markup
+                )
+                await query.message.delete()
+            else:
+                await query.edit_message_text("❌ Счет не найден.")
         else:
             await query.edit_message_text("❌ Не удалось создать график истории для этого счета.")
     
     elif query.data == "back_to_main":
         # Получаем текущие данные для обновления главного меню
         accounts_data = finance_tracker.get_accounts_summary()
+        accounts_details = finance_tracker.get_accounts_details()
         
         welcome_text = "💰 **Finance Tracker Bot с графиками**\n\n"
         
@@ -869,7 +907,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             welcome_text += f"💵 **Общий баланс: ${accounts_data['total_balance_usd']:,.2f}**\n\n"
             welcome_text += "🏦 **Ваши счета:**\n"
             
-            for account_id, account in accounts_data['accounts'].items():
+            for account_id, account in accounts_details.items():
                 welcome_text += f"• {account['name']}: {account['balance']:,.2f} {account['currency']} (≈ ${account['balance_usd']:,.2f})\n"
             
             welcome_text += "\n📱 **Отправьте скриншот** для обновления баланса!"
