@@ -1,6 +1,10 @@
 # Google credentials
 google-credentials.json
-*.json
+
+# Test results
+*_results_*.json
+ocr_results_*.json
+google_vision_results_*.json
 
 # Python
 __pycache__/

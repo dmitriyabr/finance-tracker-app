@@ -1,0 +1,195 @@
+{
+  "accounts": {
+    "account_1": {
+      "name": "Рупиевый счет",
+      "currency": "IDR",
+      "balance": 42715008.0,
+      "balance_usd": 2776.47552,
+      "last_updated": "2025-08-15T21:30:36.954096",
+      "transactions": [
+        {
+          "id": 1,
+          "timestamp": "2025-08-15T21:01:03.155760",
+          "old_balance": 0,
+          "new_balance": 42715008.0,
+          "change": 42715008.0,
+          "source": "image_upload",
+          "original_text": "Rp 42,715,008.45"
+        },
+        {
+          "id": 2,
+          "timestamp": "2025-08-15T21:12:02.851548",
+          "old_balance": 42715008.0,
+          "new_balance": 42715008.0,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "Rp 42,715,008.45"
+        },
+        {
+          "id": 3,
+          "timestamp": "2025-08-15T21:26:40.244824",
+          "old_balance": 42715008.0,
+          "new_balance": 42715008.0,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "Rp 42,715,008.45"
+        },
+        {
+          "id": 4,
+          "timestamp": "2025-08-15T21:30:36.954096",
+          "old_balance": 42715008.0,
+          "new_balance": 42715008.0,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "Rp 42,715,008.45"
+        }
+      ]
+    },
+    "account_2": {
+      "name": "Дирхамовый счет",
+      "currency": "AED",
+      "balance": 55193.09,
+      "balance_usd": 14902.1343,
+      "last_updated": "2025-08-15T21:30:34.432350",
+      "transactions": [
+        {
+          "id": 1,
+          "timestamp": "2025-08-15T21:02:08.808290",
+          "old_balance": 0,
+          "new_balance": 55193.09,
+          "change": 55193.09,
+          "source": "image_upload",
+          "original_text": "55,193.09 AED"
+        },
+        {
+          "id": 2,
+          "timestamp": "2025-08-15T21:12:05.000042",
+          "old_balance": 55193.09,
+          "new_balance": 55193.09,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "55,193.09 AED"
+        },
+        {
+          "id": 3,
+          "timestamp": "2025-08-15T21:26:42.789777",
+          "old_balance": 55193.09,
+          "new_balance": 55193.09,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "55,193.09 AED"
+        },
+        {
+          "id": 4,
+          "timestamp": "2025-08-15T21:30:34.432350",
+          "old_balance": 55193.09,
+          "new_balance": 55193.09,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "55,193.09 AED"
+        }
+      ]
+    },
+    "account_3": {
+      "name": "Долларовый счет",
+      "currency": "USD",
+      "balance": 331.59,
+      "balance_usd": 331.59,
+      "last_updated": "2025-08-15T21:30:38.848887",
+      "transactions": [
+        {
+          "id": 1,
+          "timestamp": "2025-08-15T21:02:29.383586",
+          "old_balance": 0,
+          "new_balance": 331.59,
+          "change": 331.59,
+          "source": "image_upload",
+          "original_text": "0.00 th 331.59 $ 0.00 € | 0.00 £"
+        },
+        {
+          "id": 2,
+          "timestamp": "2025-08-15T21:02:34.587539",
+          "old_balance": 331.59,
+          "new_balance": 331.59,
+          "change": 0.0,
+          "source": "image_upload",
+          "original_text": "0.00 th 331.59 $ 0.00 € | 0.00 £"
+        },
+        {
+          "id": 3,
+          "timestamp": "2025-08-15T21:12:08.558250",
+          "old_balance": 331.59,
+          "new_balance": 331.59,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "0.00 th 331.59 $ 0.00 € | 0.00 £"
+        },
+        {
+          "id": 4,
+          "timestamp": "2025-08-15T21:26:46.535456",
+          "old_balance": 331.59,
+          "new_balance": 331.59,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "0.00 th 331.59 $ 0.00 € | 0.00 £"
+        },
+        {
+          "id": 5,
+          "timestamp": "2025-08-15T21:30:38.848887",
+          "old_balance": 331.59,
+          "new_balance": 331.59,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "0.00 th 331.59 $ 0.00 € | 0.00 £"
+        }
+      ]
+    },
+    "account_4": {
+      "name": "Российский счет",
+      "currency": "RUB",
+      "balance": 250288.3,
+      "balance_usd": 2753.1712999999995,
+      "last_updated": "2025-08-15T21:30:40.277970",
+      "transactions": [
+        {
+          "id": 1,
+          "timestamp": "2025-08-15T21:02:45.877737",
+          "old_balance": 0,
+          "new_balance": 25028830.0,
+          "change": 25028830.0,
+          "source": "image_upload",
+          "original_text": "250 288,30 Р"
+        },
+        {
+          "id": 2,
+          "timestamp": "2025-08-15T21:12:06.816248",
+          "old_balance": 25028830.0,
+          "new_balance": 25028830.0,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "250 288,30 Р"
+        },
+        {
+          "id": 3,
+          "timestamp": "2025-08-15T21:26:44.697488",
+          "old_balance": 25028830.0,
+          "new_balance": 25028830.0,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "250 288,30 Р"
+        },
+        {
+          "id": 4,
+          "timestamp": "2025-08-15T21:30:40.277970",
+          "old_balance": 250288.3,
+          "new_balance": 250288.3,
+          "change": 0.0,
+          "source": "telegram",
+          "original_text": "250 288,30 Р"
+        }
+      ]
+    }
+  },
+  "total_balance_usd": 20763.37,
+  "last_updated": "2025-08-15T21:30:40.277986"
+}
