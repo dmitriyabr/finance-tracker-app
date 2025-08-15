@@ -47,9 +47,6 @@ logger = logging.getLogger(__name__)
 class FinanceTrackerBotWithGraphs:
     def __init__(self):
         """Инициализация бота"""
-        self.data_file = 'finance_data.json'
-        self.load_data()
-        
         # Инициализация Google Vision API
         try:
             # Сначала пробуем создать credentials из переменной GOOGLE_CREDENTIALS_CONTENT
@@ -114,16 +111,6 @@ class FinanceTrackerBotWithGraphs:
             'balance', 'total', 'available', 'current', 'main', 'cash',
             'баланс', 'доступно', 'основной', 'текущий', 'общий', 'наличные'
         ]
-
-    def load_data(self):
-        """Загружаем данные из базы данных"""
-        # Функция больше не нужна, данные загружаются по требованию
-        logger.info("✅ Используем базу данных")
-
-    def save_data(self):
-        """Сохраняем данные в базу данных"""
-        # Функция больше не нужна, данные сохраняются автоматически
-        logger.info("✅ Данные сохраняются в БД автоматически")
 
     def fix_russian_number_format(self, text, currency):
         """Исправляем формат российских чисел"""
@@ -241,156 +228,41 @@ class FinanceTrackerBotWithGraphs:
         
         return balances
 
-    def identify_account(self, balance_data, image_text):
-        """Определяем, какой это счет (теперь не нужна, работаем с БД)"""
-        # Функция больше не нужна, аккаунты создаются автоматически
-        return f"account_{balance_data['currency']}"
-
-    def update_account_balance(self, account_id, balance_data, source='telegram'):
-        """Обновляем баланс счета в БД"""
-        try:
-            session = create_session()
-            
-            # Ищем существующий аккаунт по валюте
-            account = session.query(Account).filter_by(
-                currency=balance_data['currency']
-            ).first()
-            
-            if not account:
-                # Создаем новый аккаунт
-                account_names = {
-                    'RUB': 'Российский счет',
-                    'USD': 'Долларовый счет',
-                    'EUR': 'Евро счет',
-                    'AED': 'Дирхамовый счет',
-                    'IDR': 'Рупиевый счет'
-                }
-                
-                account_name = account_names.get(balance_data['currency'], f'Счет в {balance_data["currency"]}')
-                
-                account = Account(
-                    name=account_name,
-                    currency=balance_data['currency'],
-                    balance=0,
-                    balance_usd=0,
-                    last_updated=datetime.utcnow()
-                )
-                session.add(account)
-                session.flush()  # Получаем ID
-            
-            # Обновляем баланс
-            old_balance = account.balance
-            account.balance = float(balance_data['value'])
-            account.balance_usd = convert_to_usd(account.balance, account.currency)
-            account.last_updated = datetime.utcnow()
-            
-            # Создаем транзакцию
-            transaction = Transaction(
-                account_id=account.id,
-                timestamp=datetime.utcnow(),
-                old_balance=old_balance,
-                new_balance=account.balance,
-                change=account.balance - old_balance,
-                source=source,
-                original_text=balance_data.get('original_text', '')
-            )
-            session.add(transaction)
-            
-            # Обновляем общий баланс в системной информации
-            system_info = session.query(SystemInfo).filter_by(key='total_balance_usd').first()
-            if system_info:
-                system_info.value = str(account.balance_usd)
-                system_info.updated_at = datetime.utcnow()
-            else:
-                system_info = SystemInfo(
-                    key='total_balance_usd',
-                    value=str(account.balance_usd),
-                    updated_at=datetime.utcnow()
-                )
-                session.add(system_info)
-            
-            session.commit()
-            
-            logger.info(f"✅ Обновлен баланс счета {account.id}: {account.balance} {account.currency} (${account.balance_usd:.2f})")
-            
-            return {
-                'id': len(account.transactions) + 1,
-                'timestamp': datetime.utcnow().isoformat(),
-                'old_balance': old_balance,
-                'new_balance': account.balance,
-                'change': account.balance - old_balance,
-                'source': source,
-                'original_text': balance_data.get('original_text', '')
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка обновления баланса: {e}")
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def convert_to_usd(self, amount, currency):
-        """Конвертируем валюту в доллары"""
-        conversion_rates = {
-            'RUB': 0.011, 'USD': 1.0, 'EUR': 1.09, 'AED': 0.27, 'IDR': 0.000065
-        }
-        
-        if currency in conversion_rates:
-            return amount * conversion_rates[currency]
-        else:
-            return amount
-
-    def update_total_balance_usd(self):
-        """Обновляем общий баланс в долларах (теперь не нужна, работаем с БД)"""
-        # Функция больше не нужна, общий баланс рассчитывается автоматически
-        pass
-
     def get_accounts_summary(self):
-        """Получаем сводку по всем счетам из БД"""
+        """Получает сводку по всем счетам"""
         try:
             session = create_session()
             accounts = session.query(Account).all()
             
-            accounts_data = {}
-            total_balance_usd = 0
+            total_balance_usd = sum(account.balance_usd for account in accounts)
             
-            for account in accounts:
-                accounts_data[f"account_{account.id}"] = {
-                    'name': account.name,
-                    'currency': account.currency,
-                    'balance': account.balance,
-                    'balance_usd': account.balance_usd,
-                    'last_updated': account.last_updated.isoformat() if account.last_updated else None,
-                    'transactions': []
-                }
-                total_balance_usd += account.balance_usd
-            
-            # Получаем предыдущий общий баланс из системной информации
-            system_info = session.query(SystemInfo).filter_by(key='total_balance_usd').first()
-            previous_total = float(system_info.value) if system_info else 0
-            
-            session.close()
+            # Получаем изменение общего баланса (пока упрощенно)
+            total_balance_change = 0  # В будущем можно добавить логику расчета изменений
             
             return {
-                'accounts': accounts_data,
-                'total_balance_usd': round(total_balance_usd, 2),
-                'previous_total_balance_usd': previous_total,
-                'total_balance_change': round(total_balance_usd - previous_total, 2),
-                'last_updated': datetime.utcnow().isoformat(),
-                'total_count': len(accounts_data)
+                'total_balance_usd': total_balance_usd,
+                'total_balance_change': total_balance_change,
+                'accounts_count': len(accounts)
             }
             
         except Exception as e:
-            logger.error(f"❌ Ошибка получения сводки: {e}")
-            return {'accounts': {}, 'total_balance_usd': 0, 'total_count': 0}
+            logger.error(f"❌ Ошибка получения сводки по счетам: {e}")
+            return {
+                'total_balance_usd': 0,
+                'total_balance_change': 0,
+                'accounts_count': 0
+            }
+        finally:
+            session.close()
 
     def create_balance_chart(self):
         """Создаем график распределения по валютам"""
         try:
-            accounts_data = self.get_accounts_summary()
+            session = create_session()
+            accounts = session.query(Account).all()
             
-            if not accounts_data['accounts']:
+            if not accounts:
+                session.close()
                 return None
             
             # Создаем круговую диаграмму
@@ -400,12 +272,13 @@ class FinanceTrackerBotWithGraphs:
             sizes = []
             colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']
             
-            for i, (account_id, account) in enumerate(accounts_data['accounts'].items()):
-                labels.append(account['name'])
-                sizes.append(account['balance_usd'])
+            for i, account in enumerate(accounts):
+                labels.append(account.name)
+                sizes.append(account.balance_usd)
             
             if not sizes or sum(sizes) == 0:
                 plt.close(fig)
+                session.close()
                 return None
             
             wedges, texts, autotexts = ax.pie(sizes, labels=labels, autopct='%1.1f%%', 
@@ -419,11 +292,9 @@ class FinanceTrackerBotWithGraphs:
             ax.set_title('Распределение активов по валютам', fontsize=16, fontweight='bold', pad=20)
             
             # Добавляем общий баланс
-            total_usd = accounts_data['total_balance_usd']
-            change = accounts_data['total_balance_change']
-            change_text = f"↗️ +${change:,.2f}" if change > 0 else f"↘️ {change:,.2f}" if change < 0 else "➡️ Без изменений"
+            total_usd = sum(account.balance_usd for account in accounts)
             
-            ax.text(0, -1.2, f'Общий баланс: ${total_usd:,.2f}\n{change_text}', 
+            ax.text(0, -1.2, f'Общий баланс: ${total_usd:,.2f}', 
                    ha='center', fontsize=14, fontweight='bold',
                    bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7))
             
@@ -434,6 +305,7 @@ class FinanceTrackerBotWithGraphs:
             plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
             img_buffer.seek(0)
             plt.close(fig)
+            session.close()
             
             return img_buffer
             
@@ -444,6 +316,8 @@ class FinanceTrackerBotWithGraphs:
                 plt.close('all')
             except:
                 pass
+            if 'session' in locals():
+                session.close()
             return None
 
     def create_account_history_chart(self, account_id):
@@ -515,6 +389,8 @@ class FinanceTrackerBotWithGraphs:
                 plt.close('all')
             except:
                 pass
+            if 'session' in locals():
+                session.close()
             return None
 
     def create_total_balance_history_chart(self):
@@ -582,12 +458,9 @@ class FinanceTrackerBotWithGraphs:
             plt.setp(ax.xaxis.get_majorticklabels(), rotation=45)
             
             # Получаем текущий общий баланс
-            accounts_data = self.get_accounts_summary()
-            current_total = accounts_data['total_balance_usd']
-            change = accounts_data['total_balance_change']
-            change_text = f"↗️ +${change:,.2f}" if change > 0 else f"↘️ {change:,.2f}" if change < 0 else "➡️ Без изменений"
+            current_total = sum(account.balance_usd for account in accounts)
             
-            ax.text(0.02, 0.98, f'Текущий баланс: ${current_total:,.2f}\n{change_text}', 
+            ax.text(0.02, 0.98, f'Текущий баланс: ${current_total:,.2f}', 
                    transform=ax.transAxes, fontsize=12, fontweight='bold',
                    bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7),
                    verticalalignment='top')
@@ -609,7 +482,99 @@ class FinanceTrackerBotWithGraphs:
                 plt.close('all')
             except:
                 pass
+            if 'session' in locals():
+                session.close()
             return None
+
+    def update_account_balance_from_image(self, balance_data, image_text, source='telegram'):
+        """Обновляем баланс счета в БД на основе распознанного изображения"""
+        try:
+            session = create_session()
+            
+            # Ищем существующий аккаунт по валюте
+            account = session.query(Account).filter_by(
+                currency=balance_data['currency']
+            ).first()
+            
+            if not account:
+                # Создаем новый аккаунт
+                account_names = {
+                    'RUB': 'Российский счет',
+                    'USD': 'Долларовый счет',
+                    'EUR': 'Евро счет',
+                    'AED': 'Дирхамовый счет',
+                    'IDR': 'Рупиевый счет'
+                }
+                
+                account_name = account_names.get(balance_data['currency'], f'Счет в {balance_data["currency"]}')
+                
+                account = Account(
+                    name=account_name,
+                    currency=balance_data['currency'],
+                    balance=0,
+                    balance_usd=0,
+                    last_updated=datetime.utcnow()
+                )
+                session.add(account)
+                session.flush()  # Получаем ID
+            
+            # Обновляем баланс
+            old_balance = account.balance
+            account.balance = float(balance_data['value'])
+            account.balance_usd = convert_to_usd(account.balance, account.currency)
+            account.last_updated = datetime.utcnow()
+            
+            # Создаем транзакцию
+            transaction = Transaction(
+                account_id=account.id,
+                timestamp=datetime.utcnow(),
+                old_balance=old_balance,
+                new_balance=account.balance,
+                change=account.balance - old_balance,
+                source=source,
+                original_text=image_text # Используем распознанный текст
+            )
+            session.add(transaction)
+            
+            # Обновляем общий баланс в системной информации
+            system_info = session.query(SystemInfo).filter_by(key='total_balance_usd').first()
+            if system_info:
+                system_info.value = str(account.balance_usd)
+                system_info.updated_at = datetime.utcnow()
+            else:
+                system_info = SystemInfo(
+                    key='total_balance_usd',
+                    value=str(account.balance_usd),
+                    updated_at=datetime.utcnow()
+                )
+                session.add(system_info)
+            
+            session.commit()
+            
+            logger.info(f"✅ Обновлен баланс счета {account.id}: {account.balance} {account.currency} (${account.balance_usd:.2f})")
+            
+            return {
+                'success': True,
+                'account': {
+                    'id': account.id,
+                    'name': account.name,
+                    'currency': account.currency,
+                    'balance': account.balance,
+                    'balance_usd': account.balance_usd,
+                    'last_updated': account.last_updated.isoformat()
+                },
+                'change': account.balance - old_balance
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка обновления баланса из изображения: {e}")
+            session.rollback()
+            return {
+                'success': False,
+                'error': str(e)
+            }
+        finally:
+            session.close()
 
 # Создаем экземпляр трекера
 finance_tracker = FinanceTrackerBotWithGraphs()
@@ -622,7 +587,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome_text = "💰 **Finance Tracker Bot с графиками**\n\n"
     
-    if accounts_data['total_count'] > 0:
+    if accounts_data['accounts_count'] > 0:
         welcome_text += f"💵 **Общий баланс: ${accounts_data['total_balance_usd']:,.2f}**\n\n"
         welcome_text += "🏦 **Ваши счета:**\n"
         
@@ -704,7 +669,7 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /history"""
     accounts_data = finance_tracker.get_accounts_summary()
     
-    if accounts_data['total_count'] == 0:
+    if accounts_data['accounts_count'] == 0:
         await update.message.reply_text("📭 У вас пока нет счетов.\n\nОтправьте скриншот банковского приложения, чтобы создать первый счет!")
         return
     
@@ -738,47 +703,45 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = finance_tracker.process_image(image_bytes)
         
         if result['success']:
-            account_id = finance_tracker.identify_account(
+            # Обновляем баланс в базе данных
+            transaction_result = finance_tracker.update_account_balance_from_image(
                 result['main_balance'], 
-                result['full_text']
-            )
-            
-            transaction = finance_tracker.update_account_balance(
-                account_id,
-                result['main_balance'], 
+                result['full_text'],
                 source='telegram'
             )
             
-            main_balance = result['main_balance']
-            account = finance_tracker.data['accounts'][account_id]
-            
-            success_text = f"✅ **Баланс обновлен!**\n\n"
-            success_text += f"🏦 **Счет:** {account['name']}\n"
-            success_text += f"💰 **Новый баланс:** {main_balance['value']} ({main_balance['currency']})\n"
-            success_text += f"💵 **В долларах:** ${account['balance_usd']:,.2f}\n"
-            
-            if transaction['change'] != 0:
-                change_emoji = "📈" if transaction['change'] > 0 else "📉"
-                change_text = f"+{transaction['change']:,.2f}" if transaction['change'] > 0 else f"{transaction['change']:,.2f}"
-                success_text += f"{change_emoji} **Изменение:** {change_text} {main_balance['currency']}\n"
-            
-            # Обновляем общий баланс
-            accounts_data = finance_tracker.get_accounts_summary()
-            success_text += f"\n💰 **Общий баланс:** ${accounts_data['total_balance_usd']:,.2f}"
-            
-            if accounts_data['total_balance_change'] != 0:
-                change = accounts_data['total_balance_change']
-                change_emoji = "↗️" if change > 0 else "↘️"
-                success_text += f"\n{change_emoji} **Изменение общего баланса:** ${change:,.2f}"
-            
-            keyboard = [
-                [InlineKeyboardButton("💰 Показать график", callback_data="show_balance_chart")],
-                [InlineKeyboardButton("📊 История", callback_data="show_history")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await processing_msg.edit_text(success_text, reply_markup=reply_markup, parse_mode='Markdown')
-            
+            if transaction_result['success']:
+                main_balance = result['main_balance']
+                account = transaction_result['account']
+                
+                success_text = f"✅ **Баланс обновлен!**\n\n"
+                success_text += f"🏦 **Счет:** {account['name']}\n"
+                success_text += f"💰 **Новый баланс:** {main_balance['value']} ({main_balance['currency']})\n"
+                success_text += f"💵 **В долларах:** ${account['balance_usd']:,.2f}\n"
+                
+                if transaction_result['change'] != 0:
+                    change_emoji = "📈" if transaction_result['change'] > 0 else "📉"
+                    change_text = f"+{transaction_result['change']:,.2f}" if transaction_result['change'] > 0 else f"{transaction_result['change']:,.2f}"
+                    success_text += f"{change_emoji} **Изменение:** {change_text} {main_balance['currency']}\n"
+                
+                # Получаем общий баланс
+                accounts_summary = finance_tracker.get_accounts_summary()
+                success_text += f"\n💰 **Общий баланс:** ${accounts_summary['total_balance_usd']:,.2f}"
+                
+                if accounts_summary.get('total_balance_change', 0) != 0:
+                    change = accounts_summary['total_balance_change']
+                    change_emoji = "↗️" if change > 0 else "↘️"
+                    success_text += f"\n{change_emoji} **Изменение общего баланса:** ${change:,.2f}"
+                
+                keyboard = [
+                    [InlineKeyboardButton("💰 Показать график", callback_data="show_balance_chart")],
+                    [InlineKeyboardButton("📊 История", callback_data="show_history")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await processing_msg.edit_text(success_text, reply_markup=reply_markup, parse_mode='Markdown')
+            else:
+                await processing_msg.edit_text(f"❌ Ошибка обновления баланса: {transaction_result['error']}", parse_mode='Markdown')
         else:
             error_text = f"❌ **Не удалось распознать баланс**\n\n"
             error_text += f"🔍 **Распознанный текст:**\n"
@@ -828,7 +791,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "show_history":
         accounts_data = finance_tracker.get_accounts_summary()
         
-        if accounts_data['total_count'] == 0:
+        if accounts_data['accounts_count'] == 0:
             await query.edit_message_text("📭 У вас пока нет счетов.\n\nОтправьте скриншот банковского приложения, чтобы создать первый счет!")
             return
         
@@ -902,7 +865,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         welcome_text = "💰 **Finance Tracker Bot с графиками**\n\n"
         
-        if accounts_data['total_count'] > 0:
+        if accounts_data['accounts_count'] > 0:
             welcome_text += f"💵 **Общий баланс: ${accounts_data['total_balance_usd']:,.2f}**\n\n"
             welcome_text += "🏦 **Ваши счета:**\n"
             
