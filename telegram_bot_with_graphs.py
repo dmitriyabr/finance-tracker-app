@@ -449,29 +449,35 @@ class FinanceTrackerBotWithGraphs:
     def create_account_history_chart(self, account_id):
         """Создаем график истории счета"""
         try:
-            if account_id not in self.data['accounts']:
+            # Получаем данные из базы данных
+            session = create_session()
+            account = session.query(Account).filter_by(id=account_id).first()
+            
+            if not account:
+                session.close()
                 return None
             
-            account = self.data['accounts'][account_id]
-            transactions = account.get('transactions', [])
+            # Получаем транзакции для этого счета
+            transactions = session.query(Transaction).filter_by(account_id=account_id).order_by(Transaction.timestamp).all()
             
             if not transactions:
+                session.close()
                 return None
             
             # Сортируем транзакции по времени
-            sorted_transactions = sorted(transactions, key=lambda x: x['timestamp'])
+            sorted_transactions = sorted(transactions, key=lambda x: x.timestamp)
             
-            dates = [datetime.fromisoformat(t['timestamp']) for t in sorted_transactions]
-            balances = [t['new_balance'] for t in sorted_transactions]
-            changes = [t['change'] for t in sorted_transactions]
+            dates = [t.timestamp for t in sorted_transactions]
+            balances = [t.new_balance for t in sorted_transactions]
+            changes = [t.change for t in sorted_transactions]
             
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
             
             # График баланса
             ax1.plot(dates, balances, 'o-', linewidth=2, markersize=6, color='#36A2EB')
             ax1.fill_between(dates, balances, alpha=0.3, color='#36A2EB')
-            ax1.set_title(f'Динамика баланса: {account["name"]}', fontsize=14, fontweight='bold')
-            ax1.set_ylabel(f'Баланс ({account["currency"]})', fontsize=12)
+            ax1.set_title(f'Динамика баланса: {account.name}', fontsize=14, fontweight='bold')
+            ax1.set_ylabel(f'Баланс ({account.currency})', fontsize=12)
             ax1.grid(True, alpha=0.3)
             
             # Форматирование дат
@@ -483,7 +489,7 @@ class FinanceTrackerBotWithGraphs:
             colors = ['green' if c > 0 else 'red' if c < 0 else 'gray' for c in changes]
             ax2.bar(dates, changes, color=colors, alpha=0.7)
             ax2.set_title('Изменения баланса', fontsize=14, fontweight='bold')
-            ax2.set_ylabel(f'Изменение ({account["currency"]})', fontsize=12)
+            ax2.set_ylabel(f'Изменение ({account.currency})', fontsize=12)
             ax2.grid(True, alpha=0.3)
             
             # Форматирование дат
@@ -499,6 +505,7 @@ class FinanceTrackerBotWithGraphs:
             img_buffer.seek(0)
             plt.close(fig)
             
+            session.close()
             return img_buffer
             
         except Exception as e:
@@ -513,23 +520,28 @@ class FinanceTrackerBotWithGraphs:
     def create_total_balance_history_chart(self):
         """Создаем график общей динамики всех счетов в USD"""
         try:
-            accounts_data = self.get_accounts_summary()
+            session = create_session()
+            accounts = session.query(Account).all()
             
-            if not accounts_data['accounts']:
+            if not accounts:
+                session.close()
                 return None
             
             # Собираем все транзакции по всем счетам
             all_transactions = []
-            for account_id, account in accounts_data['accounts'].items():
-                for transaction in account.get('transactions', []):
+            for account in accounts:
+                transactions = session.query(Transaction).filter_by(account_id=account.id).order_by(Transaction.timestamp).all()
+                for transaction in transactions:
                     # Конвертируем в USD
                     transaction_usd = {
-                        'timestamp': transaction['timestamp'],
-                        'balance_usd': transaction['new_balance'] * self.convert_to_usd(1, account['currency']),
-                        'account_name': account['name'],
-                        'currency': account['currency']
+                        'timestamp': transaction.timestamp,
+                        'balance_usd': transaction.new_balance * convert_to_usd(1, account.currency),
+                        'account_name': account.name,
+                        'currency': account.currency
                     }
                     all_transactions.append(transaction_usd)
+            
+            session.close()
             
             if not all_transactions:
                 return None
@@ -542,7 +554,7 @@ class FinanceTrackerBotWithGraphs:
             daily_totals = defaultdict(float)
             
             for transaction in sorted_transactions:
-                date = transaction['timestamp'][:10]  # Берем только дату
+                date = transaction['timestamp'].strftime('%Y-%m-%d')  # Берем только дату
                 daily_totals[date] += transaction['balance_usd']
             
             # Сортируем даты
@@ -569,7 +581,8 @@ class FinanceTrackerBotWithGraphs:
             ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
             plt.setp(ax.xaxis.get_majorticklabels(), rotation=45)
             
-            # Добавляем текущий общий баланс
+            # Получаем текущий общий баланс
+            accounts_data = self.get_accounts_summary()
             current_total = accounts_data['total_balance_usd']
             change = accounts_data['total_balance_change']
             change_text = f"↗️ +${change:,.2f}" if change > 0 else f"↘️ {change:,.2f}" if change < 0 else "➡️ Без изменений"
