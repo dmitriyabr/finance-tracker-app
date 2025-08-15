@@ -259,13 +259,20 @@ def api_accounts():
         total_balance_usd = 0
         
         for account in accounts:
+            # Получаем дату последней транзакции для этого счета
+            last_transaction = session.query(Transaction).filter_by(
+                account_id=account.id
+            ).order_by(Transaction.timestamp.desc()).first()
+            
+            last_updated = last_transaction.timestamp if last_transaction else account.last_updated
+            
             accounts_data.append({
                 'id': account.id,
                 'name': account.name,
                 'currency': account.currency,
                 'balance': account.balance,
                 'balance_usd': account.balance_usd,
-                'last_updated': account.last_updated.isoformat() if account.last_updated else None
+                'last_updated': last_updated.isoformat() if last_updated else None
             })
             total_balance_usd += account.balance_usd
         
@@ -339,26 +346,36 @@ def api_balance_history():
                     'history': []
                 })
         
-        # Группируем транзакции по дате и считаем общий баланс
-        balance_history = {}
-        current_balances = {}  # Текущий баланс каждого счета
+        # Создаем временную шкалу всех дат с транзакциями
+        all_dates = sorted(list(set(t.timestamp.strftime('%Y-%m-%d') for t in transactions)))
         
-        for transaction in transactions:
-            date_key = transaction.timestamp.strftime('%Y-%m-%d')
+        # Для каждой даты считаем общий баланс всех счетов
+        balance_history = {}
+        
+        for date_str in all_dates:
+            # Получаем все транзакции до этой даты включительно
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            end_of_day = date_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
             
-            # Обновляем баланс для данного счета
-            if transaction.account_id not in current_balances:
-                current_balances[transaction.account_id] = 0
-            current_balances[transaction.account_id] = transaction.new_balance
+            # Получаем последние транзакции для каждого счета до этой даты
+            account_balances = {}
+            for account in session.query(Account).all():
+                last_transaction = session.query(Transaction).filter(
+                    Transaction.account_id == account.id,
+                    Transaction.timestamp <= end_of_day
+                ).order_by(Transaction.timestamp.desc()).first()
+                
+                if last_transaction:
+                    account_balances[account.currency] = last_transaction.new_balance
+                else:
+                    account_balances[account.currency] = 0
             
             # Считаем общий баланс в USD на эту дату
             total_usd = 0
-            for account_id, balance in current_balances.items():
-                account = session.query(Account).filter_by(id=account_id).first()
-                if account:
-                    total_usd += convert_to_usd(balance, account.currency)
+            for currency, balance in account_balances.items():
+                total_usd += convert_to_usd(balance, currency)
             
-            balance_history[date_key] = round(total_usd, 2)
+            balance_history[date_str] = round(total_usd, 2)
         
         # Преобразуем в список для графика
         history_data = [

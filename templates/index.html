@@ -283,8 +283,16 @@
             document.getElementById('totalTransactions').textContent = getTotalTransactions();
             
             if (data.accounts.length > 0) {
+                // Находим самое последнее обновление среди всех счетов
                 const lastUpdate = new Date(Math.max(...data.accounts.map(a => new Date(a.last_updated))));
                 document.getElementById('lastUpdate').textContent = formatDate(lastUpdate);
+                
+                // Добавляем отладочную информацию в консоль
+                console.log('Последние обновления по счетам:');
+                data.accounts.forEach(account => {
+                    console.log(`${account.name}: ${formatDate(new Date(account.last_updated))}`);
+                });
+                console.log(`Общее последнее обновление: ${formatDate(lastUpdate)}`);
             }
             
             updateAccountsList(data.accounts);
