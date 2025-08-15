@@ -15,12 +15,35 @@ try:
     credentials_path = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
     print(f"🔍 GOOGLE_APPLICATION_CREDENTIALS: {credentials_path}")
     
-    if credentials_path and os.path.exists(credentials_path):
-        print(f"✅ Credentials файл найден: {credentials_path}")
-        vision_client = vision.ImageAnnotatorClient()
-        print("✅ Google Vision API подключен!")
+    if credentials_path:
+        print(f"✅ Credentials путь установлен: {credentials_path}")
+        
+        # В Railway credentials_path может быть временным файлом
+        if os.path.exists(credentials_path):
+            print(f"✅ Credentials файл найден: {credentials_path}")
+            vision_client = vision.ImageAnnotatorClient()
+            print("✅ Google Vision API подключен!")
+        else:
+            print(f"⚠️ Credentials файл не найден по пути: {credentials_path}")
+            # Пробуем создать credentials из переменной GOOGLE_CREDENTIALS_CONTENT
+            credentials_content = os.environ.get('GOOGLE_CREDENTIALS_CONTENT')
+            if credentials_content:
+                print("🔧 Создаю credentials из GOOGLE_CREDENTIALS_CONTENT...")
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    f.write(credentials_content)
+                    temp_credentials_path = f.name
+                    print(f"📝 Создан временный файл: {temp_credentials_path}")
+                
+                # Временно устанавливаем путь
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_credentials_path
+                vision_client = vision.ImageAnnotatorClient()
+                print("✅ Google Vision API подключен через временный файл!")
+            else:
+                print("❌ GOOGLE_CREDENTIALS_CONTENT не установлен")
+                vision_client = None
     else:
-        print(f"❌ Credentials файл не найден или не существует")
+        print("❌ GOOGLE_APPLICATION_CREDENTIALS не установлен")
         vision_client = None
         
 except Exception as e:
