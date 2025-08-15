@@ -215,7 +215,8 @@
                 </div>
                 <div class="col-md-6">
                     <div class="chart-container">
-                        <h4>История общего баланса</h4>
+                        <h4>📈 История общего баланса</h4>
+                        <p class="text-muted small mb-3">Показывает динамику изменения общего баланса всех счетов в USD с течением времени</p>
                         <canvas id="totalBalanceChart"></canvas>
                     </div>
                 </div>
@@ -343,8 +344,10 @@
                     const balance = data.main_balance;
                     showMessage(`✅ Найден баланс: ${formatNumber(balance.value)} ${balance.currency}`, 'success');
                     
-                    // Перезагружаем счета
-                    loadAccounts();
+                    // Перезагружаем счета и графики с небольшой задержкой
+                    setTimeout(() => {
+                        loadAccounts();
+                    }, 1000);
                 } else {
                     showMessage('❌ Ошибка: ' + data.error, 'error');
                 }
@@ -406,38 +409,82 @@
                 totalBalanceChart.destroy();
             }
             
-            if (accounts.length === 0) return;
-            
-            // Создаем простой график с текущими данными
-            const labels = accounts.map(a => a.currency);
-            const data = accounts.map(a => a.balance_usd);
-            
-            totalBalanceChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Баланс в USD',
-                        data: data,
-                        backgroundColor: '#36A2EB',
-                        borderColor: '#2196F3',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
+            // Загружаем историю баланса
+            fetch('/api/balance_history')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.history.length > 0) {
+                        const labels = data.history.map(item => {
+                            // Форматируем дату для лучшего отображения
+                            const date = new Date(item.date);
+                            return date.toLocaleDateString('ru-RU', {
+                                day: '2-digit',
+                                month: '2-digit'
+                            });
+                        });
+                        const balanceData = data.history.map(item => item.balance);
+                        
+                        totalBalanceChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Общий баланс (USD)',
+                                    data: balanceData,
+                                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                                    borderColor: '#36A2EB',
+                                    borderWidth: 3,
+                                    fill: true,
+                                    tension: 0.4,
+                                    pointBackgroundColor: '#36A2EB',
+                                    pointBorderColor: '#fff',
+                                    pointBorderWidth: 2,
+                                    pointRadius: 4
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                scales: {
+                                    x: {
+                                        title: {
+                                            display: true,
+                                            text: 'Дата'
+                                        }
+                                    },
+                                    y: {
+                                        beginAtZero: true,
+                                        title: {
+                                            display: true,
+                                            text: 'Баланс (USD)'
+                                        }
+                                    }
+                                },
+                                plugins: {
+                                    legend: {
+                                        display: true,
+                                        position: 'top'
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                return `Баланс: $${context.parsed.y.toFixed(2)}`;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    } else {
+                        // Если нет истории, показываем сообщение
+                        const container = document.getElementById('totalBalanceChart').parentElement;
+                        container.innerHTML = '<p class="text-muted text-center">История баланса пока пуста. Добавьте транзакции через загрузку скриншотов!</p>';
                     }
-                }
-            });
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки истории баланса:', error);
+                    const container = document.getElementById('totalBalanceChart').parentElement;
+                    container.innerHTML = '<p class="text-muted text-center">Ошибка загрузки истории баланса</p>';
+                });
         }
         
         // Загрузка курсов валют

@@ -312,6 +312,70 @@ def api_force_update_rates():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/balance_history')
+def api_balance_history():
+    """API для получения истории общего баланса"""
+    try:
+        session = create_session()
+        
+        # Получаем все транзакции, отсортированные по времени
+        transactions = session.query(Transaction).join(Account).order_by(Transaction.timestamp).all()
+        
+        if not transactions:
+            # Если нет транзакций, возвращаем текущий общий баланс
+            accounts = session.query(Account).all()
+            total_balance_usd = sum(convert_to_usd(account.balance, account.currency) for account in accounts)
+            
+            if total_balance_usd > 0:
+                # Возвращаем текущий баланс как одну точку
+                today = datetime.utcnow().strftime('%Y-%m-%d')
+                return jsonify({
+                    'success': True,
+                    'history': [{'date': today, 'balance': round(total_balance_usd, 2)}]
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'history': []
+                })
+        
+        # Группируем транзакции по дате и считаем общий баланс
+        balance_history = {}
+        current_balances = {}  # Текущий баланс каждого счета
+        
+        for transaction in transactions:
+            date_key = transaction.timestamp.strftime('%Y-%m-%d')
+            
+            # Обновляем баланс для данного счета
+            if transaction.account_id not in current_balances:
+                current_balances[transaction.account_id] = 0
+            current_balances[transaction.account_id] = transaction.new_balance
+            
+            # Считаем общий баланс в USD на эту дату
+            total_usd = 0
+            for account_id, balance in current_balances.items():
+                account = session.query(Account).filter_by(id=account_id).first()
+                if account:
+                    total_usd += convert_to_usd(balance, account.currency)
+            
+            balance_history[date_key] = round(total_usd, 2)
+        
+        # Преобразуем в список для графика
+        history_data = [
+            {'date': date, 'balance': balance} 
+            for date, balance in sorted(balance_history.items())
+        ]
+        
+        return jsonify({
+            'success': True,
+            'history': history_data
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    finally:
+        session.close()
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
