@@ -6,5 +6,35 @@
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
-  }
+  },
+  "services": [
+    {
+      "name": "web",
+      "source": {
+        "type": "github",
+        "repo": "dmitriyabr/finance-tracker-app",
+        "branch": "main"
+      },
+      "build": {
+        "builder": "NIXPACKS"
+      },
+      "deploy": {
+        "startCommand": "gunicorn --bind 0.0.0.0:$PORT app_simple:app"
+      }
+    },
+    {
+      "name": "bot",
+      "source": {
+        "type": "github",
+        "repo": "dmitriyabr/finance-tracker-app",
+        "branch": "main"
+      },
+      "build": {
+        "builder": "NIXPACKS"
+      },
+      "deploy": {
+        "startCommand": "python telegram_bot_with_graphs.py"
+      }
+    }
+  ]
 } 
