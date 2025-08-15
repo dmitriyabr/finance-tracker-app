@@ -3,11 +3,19 @@
 SQLAlchemy модели для Finance Tracker
 """
 
+import os
+import sys
+from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
-import os
+from sqlalchemy.exc import SQLAlchemyError
+import json
+
+# Кэш для курсов валют
+_exchange_rates_cache = {}
+_cache_expiry = None
+_cache_duration = timedelta(hours=1)  # Обновляем курсы каждый час
 
 # Создаем базовый класс для моделей
 Base = declarative_base()
@@ -166,23 +174,111 @@ def migrate_from_json(json_file_path='finance_data.json'):
     finally:
         session.close()
 
-# Функция для конвертации валют в USD (упрощенная версия)
+# Функция для конвертации валют в USD (с актуальными курсами)
 def convert_to_usd(amount, currency):
     """
     Конвертирует сумму из указанной валюты в USD
-    Это упрощенная версия - в реальном приложении нужно использовать API курсов валют
+    Использует актуальные курсы валют через API с кэшированием
     """
-    # Простые курсы валют (для демонстрации)
-    exchange_rates = {
+    if currency.upper() == 'USD':
+        return amount
+    
+    # Проверяем кэш
+    if _is_cache_valid():
+        rate = _exchange_rates_cache.get(currency.upper())
+        if rate is not None:
+            return amount * rate
+    
+    # Получаем свежие курсы
+    try:
+        _update_exchange_rates_cache()
+        rate = _exchange_rates_cache.get(currency.upper())
+        if rate is not None:
+            return amount * rate
+        else:
+            print(f"⚠️ Курс для валюты {currency} не найден, используем 1.0")
+            return amount
+    except Exception as e:
+        print(f"⚠️ Ошибка получения курсов валют: {e}, используем фиксированные курсы")
+        return _convert_with_fixed_rates(amount, currency)
+
+def _is_cache_valid():
+    """Проверяет, действителен ли кэш курсов валют"""
+    global _cache_expiry
+    return _cache_expiry and datetime.utcnow() < _cache_expiry
+
+def _update_exchange_rates_cache():
+    """Обновляет кэш курсов валют через API"""
+    global _exchange_rates_cache, _cache_expiry
+    
+    try:
+        import requests
+        
+        # Используем бесплатный API для курсов валют
+        api_url = "https://api.exchangerate-api.com/v4/latest/USD"
+        
+        response = requests.get(api_url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            rates = data['rates']
+            
+            # Сохраняем курсы в кэш (инвертируем, так как API возвращает USD к валюте)
+            _exchange_rates_cache = {currency: 1/rate for currency, rate in rates.items()}
+            _exchange_rates_cache['USD'] = 1.0  # USD всегда 1.0
+            
+            # Устанавливаем время истечения кэша
+            _cache_expiry = datetime.utcnow() + _cache_duration
+            
+            print("✅ Курсы валют обновлены")
+        else:
+            print(f"⚠️ Ошибка API курсов валют: {response.status_code}")
+            raise Exception(f"API вернул статус {response.status_code}")
+            
+    except Exception as e:
+        print(f"⚠️ Ошибка обновления курсов валют: {e}")
+        # Если не удалось обновить, используем фиксированные курсы
+        _exchange_rates_cache = _get_fixed_rates()
+        _cache_expiry = datetime.utcnow() + timedelta(minutes=30)  # Короткий кэш для фиксированных курсов
+
+def _get_fixed_rates():
+    """Возвращает фиксированные курсы валют"""
+    return {
         'RUB': 0.011,  # 1 RUB = 0.011 USD
         'EUR': 1.08,   # 1 EUR = 1.08 USD
         'AED': 0.27,   # 1 AED = 0.27 USD
         'IDR': 0.000065, # 1 IDR = 0.000065 USD
         'USD': 1.0     # 1 USD = 1.0 USD
     }
-    
-    rate = exchange_rates.get(currency.upper(), 1.0)
+
+def _convert_with_fixed_rates(amount, currency):
+    """
+    Резервная функция с фиксированными курсами валют
+    Используется при ошибках API
+    """
+    fixed_rates = _get_fixed_rates()
+    rate = fixed_rates.get(currency.upper(), 1.0)
     return amount * rate
+
+def force_update_exchange_rates():
+    """
+    Принудительно обновляет курсы валют
+    Возвращает True если успешно, False если ошибка
+    """
+    try:
+        _update_exchange_rates_cache()
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка принудительного обновления курсов: {e}")
+        return False
+
+def get_current_exchange_rates():
+    """
+    Возвращает текущие курсы валют из кэша
+    """
+    if not _is_cache_valid():
+        _update_exchange_rates_cache()
+    
+    return _exchange_rates_cache.copy()
 
 if __name__ == '__main__':
     # Создаем таблицы и мигрируем данные

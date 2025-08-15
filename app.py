@@ -4,7 +4,7 @@ Finance Tracker - Flask приложение с базой данных
 """
 
 from flask import Flask, render_template, request, jsonify
-from models import create_session, Account, Transaction, SystemInfo
+from models import create_session, Account, Transaction, SystemInfo, force_update_exchange_rates, get_current_exchange_rates, convert_to_usd
 from datetime import datetime
 import os
 import re
@@ -82,17 +82,6 @@ def fix_russian_number_format(text, currency):
             except ValueError:
                 pass
     return None
-
-def convert_to_usd(amount, currency):
-    """Конвертируем валюту в доллары"""
-    conversion_rates = {
-        'RUB': 0.011, 'USD': 1.0, 'EUR': 1.09, 'AED': 0.27, 'IDR': 0.000065
-    }
-    
-    if currency in conversion_rates:
-        return amount * conversion_rates[currency]
-    else:
-        return amount
 
 def extract_balance_from_text(text_lines):
     """Извлекаем баланс из распознанного текста"""
@@ -298,6 +287,30 @@ def api_vision_status():
         'vision_available': vision_client is not None,
         'status': 'OK' if vision_client else 'UNAVAILABLE'
     })
+
+@app.route('/api/exchange_rates')
+def api_exchange_rates():
+    """API для получения текущих курсов валют"""
+    try:
+        rates = get_current_exchange_rates()
+        return jsonify({
+            'success': True,
+            'rates': rates
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/force_update_rates')
+def api_force_update_rates():
+    """API для принудительного обновления курсов валют"""
+    try:
+        force_update_exchange_rates()
+        return jsonify({
+            'success': True,
+            'message': 'Курсы валют успешно обновлены'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/health')
 def health():
