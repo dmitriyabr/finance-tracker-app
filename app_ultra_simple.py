@@ -6,6 +6,7 @@ import base64
 app = Flask(__name__)
 
 # Инициализация Google Vision API
+vision_client = None
 try:
     from google.cloud import vision
     if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
@@ -17,14 +18,14 @@ try:
                 f.write(credentials_content)
                 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
             
-        self.vision_client = vision.ImageAnnotatorClient()
-        print("✅ Google Vision API подключен!")
-    else:
-        self.vision_client = vision.ImageAnnotatorClient()
-        print("✅ Google Vision API подключен!")
+            vision_client = vision.ImageAnnotatorClient()
+            print("✅ Google Vision API подключен!")
+        else:
+            vision_client = vision.ImageAnnotatorClient()
+            print("✅ Google Vision API подключен!")
 except Exception as e:
     print(f"❌ Ошибка подключения к Google Vision: {e}")
-    self.vision_client = None
+    vision_client = None
 
 class FinanceTracker:
     def __init__(self):
@@ -48,13 +49,13 @@ class FinanceTracker:
     
     def process_image(self, image_content):
         """Обрабатываем изображение через Google Vision"""
-        if not self.vision_client:
+        if not vision_client:
             return {'success': False, 'error': 'Google Vision недоступен'}
         
         try:
             import re
             image = vision.Image(content=image_content)
-            response = self.vision_client.text_detection(image=image)
+            response = vision_client.text_detection(image=image)
             texts = response.text_annotations
             
             if not texts:
@@ -361,20 +362,49 @@ def add_balance():
 def process_image():
     """API для обработки изображения"""
     try:
+        print("🔄 Начинаю обработку изображения...")
+        
         if 'image' not in request.files:
+            print("❌ Изображение не найдено в request.files")
             return jsonify({'success': False, 'error': 'Изображение не найдено'})
         
         image_file = request.files['image']
         if image_file.filename == '':
+            print("❌ Файл не выбран")
             return jsonify({'success': False, 'error': 'Файл не выбран'})
         
+        print(f"📁 Получен файл: {image_file.filename}")
+        
         image_content = image_file.read()
+        print(f"📊 Размер изображения: {len(image_content)} байт")
+        
+        # Проверяем Google Vision API
+        if not vision_client:
+            print("❌ Google Vision API недоступен")
+            return jsonify({'success': False, 'error': 'Google Vision API недоступен'})
+        
+        print("🔍 Отправляю изображение в Google Vision...")
         result = finance_tracker.process_image(image_content)
         
+        print(f"📋 Результат обработки: {result}")
         return jsonify(result)
         
     except Exception as e:
+        print(f"❌ Ошибка в API: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/vision_status')
+def vision_status():
+    """Проверка статуса Google Vision API"""
+    status = {
+        'vision_available': vision_client is not None,
+        'credentials_set': bool(os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')),
+        'credentials_content': bool(os.environ.get('GOOGLE_CREDENTIALS_CONTENT')),
+        'timestamp': datetime.now().isoformat()
+    }
+    return jsonify(status)
 
 @app.route('/health')
 def health():
