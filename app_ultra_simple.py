@@ -204,6 +204,7 @@ def index():
                 <h3>📱 Загрузить скриншот банковского приложения:</h3>
                 <input type="file" id="imageFile" accept="image/*">
                 <button onclick="processImage()">Распознать баланс</button>
+                <button onclick="testAPI()" style="background: #28a745;">🧪 Тест API</button>
                 <div id="imageResult"></div>
             </div>
             
@@ -243,6 +244,8 @@ def index():
             }
             
             function processImage() {
+                console.log('🔄 Начинаю обработку изображения...');
+                
                 const fileInput = document.getElementById('imageFile');
                 const file = fileInput.files[0];
                 
@@ -251,20 +254,30 @@ def index():
                     return;
                 }
                 
+                console.log('📁 Файл выбран:', file.name, 'Размер:', file.size, 'байт');
+                
                 const formData = new FormData();
                 formData.append('image', file);
+                
+                console.log('📤 Отправляю запрос к /api/process_image...');
                 
                 fetch('/api/process_image', {
                     method: 'POST',
                     body: formData
                 })
-                .then(response => response.json())
+                .then(response => {
+                    console.log('📥 Получен ответ:', response.status, response.statusText);
+                    return response.json();
+                })
                 .then(data => {
+                    console.log('📋 Данные ответа:', data);
+                    
                     if (data.success) {
                         const balance = data.main_balance;
                         showMessage(`Найден баланс: ${balance.value} ${balance.currency}`, 'success');
                         
                         // Автоматически добавляем найденный баланс
+                        console.log('💾 Автоматически добавляю баланс...');
                         fetch('/api/add_balance', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -280,6 +293,10 @@ def index():
                     } else {
                         showMessage('Ошибка: ' + data.error, 'error');
                     }
+                })
+                .catch(error => {
+                    console.error('❌ Ошибка при обработке изображения:', error);
+                    showMessage('Ошибка сети: ' + error.message, 'error');
                 });
             }
             
@@ -310,6 +327,47 @@ def index():
                 const resultDiv = document.getElementById('imageResult');
                 resultDiv.innerHTML = `<div class="${type}">${message}</div>`;
                 setTimeout(() => resultDiv.innerHTML = '', 5000);
+            }
+            
+            function testAPI() {
+                console.log('🧪 Тестирую API...');
+                showMessage('Тестирую API...', 'success');
+                
+                // Тест 1: Проверка здоровья
+                fetch('/health')
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('✅ Health check:', data);
+                        showMessage('Health: OK', 'success');
+                    })
+                    .catch(error => {
+                        console.error('❌ Health check failed:', error);
+                        showMessage('Health: FAILED', 'error');
+                    });
+                
+                // Тест 2: Статус Google Vision
+                fetch('/api/vision_status')
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('✅ Vision status:', data);
+                        showMessage(`Vision: ${data.vision_available ? 'OK' : 'FAILED'}`, data.vision_available ? 'success' : 'error');
+                    })
+                    .catch(error => {
+                        console.error('❌ Vision status failed:', error);
+                        showMessage('Vision: FAILED', 'error');
+                    });
+                
+                // Тест 3: Получение счетов
+                fetch('/api/accounts')
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('✅ Accounts:', data);
+                        showMessage(`Accounts: ${data.total_count} счетов`, 'success');
+                    })
+                    .catch(error => {
+                        console.error('❌ Accounts failed:', error);
+                        showMessage('Accounts: FAILED', 'error');
+                    });
             }
             
             // Загружаем данные при старте
