@@ -25,23 +25,38 @@ try:
             print("✅ Google Vision API подключен!")
         else:
             print(f"⚠️ Credentials файл не найден по пути: {credentials_path}")
-            # Пробуем создать credentials из переменной GOOGLE_CREDENTIALS_CONTENT
-            credentials_content = os.environ.get('GOOGLE_CREDENTIALS_CONTENT')
-            if credentials_content:
-                print("🔧 Создаю credentials из GOOGLE_CREDENTIALS_CONTENT...")
-                import tempfile
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                    f.write(credentials_content)
-                    temp_credentials_path = f.name
-                    print(f"📝 Создан временный файл: {temp_credentials_path}")
-                
-                # Временно устанавливаем путь
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_credentials_path
+            
+            # Пробуем найти файл в текущей директории
+            current_dir = os.getcwd()
+            print(f"🔍 Текущая директория: {current_dir}")
+            
+            # Ищем файл google-credentials.json в текущей директории
+            local_credentials_path = os.path.join(current_dir, 'google-credentials.json')
+            if os.path.exists(local_credentials_path):
+                print(f"✅ Найден локальный файл: {local_credentials_path}")
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = local_credentials_path
                 vision_client = vision.ImageAnnotatorClient()
-                print("✅ Google Vision API подключен через временный файл!")
+                print("✅ Google Vision API подключен через локальный файл!")
             else:
-                print("❌ GOOGLE_CREDENTIALS_CONTENT не установлен")
-                vision_client = None
+                print(f"❌ Локальный файл не найден: {local_credentials_path}")
+                
+                # Пробуем создать credentials из переменной GOOGLE_CREDENTIALS_CONTENT
+                credentials_content = os.environ.get('GOOGLE_CREDENTIALS_CONTENT')
+                if credentials_content:
+                    print("🔧 Создаю credentials из GOOGLE_CREDENTIALS_CONTENT...")
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        f.write(credentials_content)
+                        temp_credentials_path = f.name
+                        print(f"📝 Создан временный файл: {temp_credentials_path}")
+                    
+                    # Временно устанавливаем путь
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_credentials_path
+                    vision_client = vision.ImageAnnotatorClient()
+                    print("✅ Google Vision API подключен через временный файл!")
+                else:
+                    print("❌ GOOGLE_CREDENTIALS_CONTENT не установлен")
+                    vision_client = None
     else:
         print("❌ GOOGLE_APPLICATION_CREDENTIALS не установлен")
         vision_client = None
