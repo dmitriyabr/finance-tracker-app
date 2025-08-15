@@ -352,28 +352,31 @@ def api_balance_history():
         # Для каждой даты считаем общий баланс всех счетов
         balance_history = {}
         
+        # Отслеживаем последний известный баланс каждого счета
+        last_known_balances = {}
+        
         for date_str in all_dates:
-            # Получаем все транзакции до этой даты включительно
+            # Получаем все транзакции на эту дату
             date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+            start_of_day = date_obj.replace(hour=0, minute=0, second=0, microsecond=0)
             end_of_day = date_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
             
-            # Получаем последние транзакции для каждого счета до этой даты
-            account_balances = {}
-            for account in session.query(Account).all():
-                last_transaction = session.query(Transaction).filter(
-                    Transaction.account_id == account.id,
-                    Transaction.timestamp <= end_of_day
-                ).order_by(Transaction.timestamp.desc()).first()
-                
-                if last_transaction:
-                    account_balances[account.currency] = last_transaction.new_balance
-                else:
-                    account_balances[account.currency] = 0
+            # Получаем транзакции на эту дату
+            day_transactions = session.query(Transaction).filter(
+                Transaction.timestamp >= start_of_day,
+                Transaction.timestamp <= end_of_day
+            ).order_by(Transaction.timestamp).all()
+            
+            # Обновляем последние известные балансы для счетов с транзакциями на эту дату
+            for transaction in day_transactions:
+                last_known_balances[transaction.account_id] = transaction.new_balance
             
             # Считаем общий баланс в USD на эту дату
             total_usd = 0
-            for currency, balance in account_balances.items():
-                total_usd += convert_to_usd(balance, currency)
+            for account in session.query(Account).all():
+                # Используем последний известный баланс или 0, если транзакций не было
+                balance = last_known_balances.get(account.id, 0)
+                total_usd += convert_to_usd(balance, account.currency)
             
             balance_history[date_str] = round(total_usd, 2)
         
