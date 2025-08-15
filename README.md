@@ -1,174 +1,132 @@
-# 💰 Finance Tracker - Отслеживание личных финансов
+# 💰 Finance Tracker - Personal Finance Management App
 
-## 🎯 Описание
+Personal finance tracking application with Telegram bot integration and web interface.
 
-**Finance Tracker** - это веб-приложение для автоматического отслеживания личных финансов через загрузку скриншотов банковских приложений. Использует **Google Cloud Vision API** для распознавания балансов в любых валютах.
+## 🚀 Features
 
-## ✨ Возможности
+- **📱 Telegram Bot**: Send bank app screenshots to automatically update balances
+- **🌐 Web Interface**: View accounts, balances, and transaction history
+- **🔍 OCR Integration**: Google Cloud Vision API for accurate text recognition
+- **💱 Multi-Currency Support**: RUB, USD, EUR, AED, IDR with USD conversion
+- **📊 Visualizations**: Charts and graphs for balance tracking
+- **🔄 Real-time Updates**: Automatic balance updates and transaction history
 
-- 📱 **Загрузка скриншотов** банковских приложений
-- 🔍 **Автоматическое распознавание** балансов через Google Vision API
-- 🌍 **Поддержка всех валют**: RUB, USD, EUR, AED, IDR и других
-- 💾 **Автоматическое сохранение** в базу данных
-- 📊 **Веб-интерфейс** для просмотра истории
-- 📈 **Конвертация валют** в общий баланс
-- 🔄 **Автообновление** данных
+## 🛠️ Tech Stack
 
-## 🚀 Быстрый старт
+- **Backend**: Python, Flask
+- **OCR**: Google Cloud Vision API
+- **Telegram Bot**: python-telegram-bot
+- **Frontend**: HTML, CSS, JavaScript, Chart.js
+- **Charts**: Matplotlib, Chart.js
+- **Deployment**: Railway
 
-### 1. Установка зависимостей
+## 📋 Setup
 
+### Prerequisites
+
+1. **Google Cloud Vision API** credentials
+2. **Telegram Bot Token** from @BotFather
+3. **Python 3.9+**
+
+### Installation
+
+1. Clone the repository:
 ```bash
-pip3 install -r requirements.txt
+git clone https://github.com/dmitriyabr/finance-tracker-app.git
+cd finance-tracker-app
 ```
 
-### 2. Настройка Google Cloud Vision API
-
-Следуйте инструкции в [GOOGLE_VISION_SETUP.md](GOOGLE_VISION_SETUP.md)
-
-### 3. Настройка переменной окружения
-
+2. Install dependencies:
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/google-credentials.json"
+pip install -r requirements.txt
 ```
 
-### 4. Запуск приложения
-
+3. Set environment variables:
 ```bash
+export GOOGLE_APPLICATION_CREDENTIALS="path/to/google-credentials.json"
+export TELEGRAM_BOT_TOKEN="your_bot_token"
+```
+
+4. Run the application:
+```bash
+# Web interface
 python3 app.py
+
+# Telegram bot (in another terminal)
+python3 run_telegram_bot.py
 ```
 
-### 5. Открытие в браузере
+## 🌐 Usage
 
-Перейдите по адресу: [http://localhost:5000](http://localhost:5000)
+### Web Interface
+- Open `http://localhost:5001`
+- Upload bank screenshots
+- View account balances and history
+- Interactive charts and visualizations
 
-## 📁 Структура проекта
+### Telegram Bot
+- Send `/start` to begin
+- Send bank app screenshots
+- Use `/balance` for balance charts
+- Use `/history` for transaction history
 
-```
-finance-tracker/
-├── app.py                 # Основное Flask приложение
-├── templates/            # HTML шаблоны
-│   └── index.html       # Главная страница
-├── static/              # Статические файлы
-│   ├── css/
-│   │   └── style.css    # Стили
-│   └── js/
-│       └── app.js       # JavaScript
-├── requirements.txt      # Зависимости Python
-├── GOOGLE_VISION_SETUP.md # Инструкция по настройке Google Vision
-└── README.md            # Этот файл
-```
+## 🚀 Deployment
 
-## 🔧 API Endpoints
+### Railway (Recommended)
 
-### `GET /`
-Главная страница с веб-интерфейсом
+1. Fork this repository
+2. Create project on [Railway](https://railway.app)
+3. Connect your GitHub repository
+4. Set environment variables:
+   - `GOOGLE_APPLICATION_CREDENTIALS`
+   - `TELEGRAM_BOT_TOKEN`
+5. Deploy automatically
 
-### `GET /api/balances`
-Получение списка всех балансов
+## 📱 Supported Banks
 
-### `POST /api/process_image`
-Обработка загруженного изображения
+- **Russian Banks**: Sberbank, Tinkoff, VTB, etc.
+- **International**: Any bank with clear balance display
+- **Currencies**: RUB, USD, EUR, AED, IDR
 
-### `POST /api/add_balance`
-Добавление баланса вручную
+## 🔧 Configuration
 
-## 💡 Как использовать
+### Environment Variables
 
-### Загрузка скриншота:
-1. **Сделайте скриншот** главного экрана банковского приложения
-2. **Загрузите** в приложение через форму
-3. **Дождитесь** обработки Google Vision API
-4. **Просмотрите** найденные балансы
+- `GOOGLE_APPLICATION_CREDENTIALS`: Path to Google Cloud credentials
+- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token
+- `PORT`: Web server port (default: 5001)
 
-### Ручное добавление:
-1. **Введите сумму** в поле
-2. **Выберите валюту** из списка
-3. **Нажмите** "Добавить"
+### Data Storage
 
-## 🌍 Поддерживаемые валюты
+- Account balances stored in `finance_data.json`
+- Transaction history for each account
+- Automatic USD conversion rates
 
-| Валюта | Символ | Пример |
-|--------|--------|--------|
-| Рубли | ₽ | 123 456,78 ₽ |
-| Доллары | $ | 1,234.56 $ |
-| Евро | € | 1.234,56 € |
-| Дирхамы | AED | 55,193.09 AED |
-| Рупии | Rp | Rp 42,715,008.45 |
+## 📊 API Endpoints
 
-## ⚙️ Конфигурация
+- `GET /`: Main web interface
+- `GET /api/accounts`: Get all accounts summary
+- `POST /api/process_image`: Process uploaded image
+- `GET /api/account/<id>/history`: Get account history
 
-### Переменные окружения:
-- `GOOGLE_APPLICATION_CREDENTIALS` - путь к JSON ключу Google Vision API
+## 🤝 Contributing
 
-### Настройки приложения:
-- Порт: 5000 (по умолчанию)
-- Хост: 0.0.0.0 (доступно извне)
-- Режим отладки: включен
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
 
-## 🚀 Развертывание
+## 📄 License
 
-### Локально:
-```bash
-python3 app.py
-```
+This project is open source and available under the [MIT License](LICENSE).
 
-### На сервере:
-```bash
-# Установка зависимостей
-pip3 install -r requirements.txt
+## 🆘 Support
 
-# Запуск в фоне
-nohup python3 app.py > app.log 2>&1 &
-
-# Или через systemd
-sudo systemctl start finance-tracker
-```
-
-## 🔒 Безопасность
-
-- **Не публикуйте** JSON ключи Google Vision API
-- **Добавьте** `google-credentials.json` в `.gitignore`
-- **Ограничьте** доступ к API только необходимыми функциями
-
-## 💰 Стоимость
-
-- **Google Vision API**: $1.50 за 1000 запросов
-- **Бесплатный план**: 1000 запросов в месяц
-- **Для личного использования**: очень дешево
-
-## 🐛 Устранение неполадок
-
-### Ошибка "Google Vision недоступен":
-1. Проверьте настройку переменной `GOOGLE_APPLICATION_CREDENTIALS`
-2. Убедитесь, что JSON ключ корректный
-3. Проверьте включение биллинга в Google Cloud
-
-### Ошибка "Текст не найден":
-1. Проверьте качество скриншота
-2. Убедитесь, что баланс виден на изображении
-3. Попробуйте другой ракурс
-
-### Проблемы с Flask:
-1. Проверьте установку зависимостей
-2. Убедитесь, что порт 5000 свободен
-3. Проверьте права доступа к файлам
-
-## 📞 Поддержка
-
-При возникновении проблем:
-1. Проверьте логи в консоли
-2. Убедитесь в корректности настроек
-3. Проверьте документацию Google Vision API
-
-## 🔄 Обновления
-
-Для обновления приложения:
-```bash
-git pull origin main
-pip3 install -r requirements.txt --upgrade
-```
+For issues and questions:
+- Create an issue on GitHub
+- Check the documentation
+- Review error logs
 
 ---
 
-**🎉 Готово! Теперь у вас есть полноценное приложение для отслеживания личных финансов!** 
+**Made with ❤️ for personal finance management** 

@@ -6,6 +6,12 @@ google-credentials.json
 ocr_results_*.json
 google_vision_results_*.json
 
+# Test images
+test_*.png
+test_*.jpg
+test_*.jpeg
+test_screenshots/
+
 # Python
 __pycache__/
 *.py[cod]

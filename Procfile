@@ -1,2 +1,1 @@
-web: python3 app.py
-telegram: python3 telegram_bot_with_graphs.py 
+web: gunicorn app:app --bind 0.0.0.0:$PORT 
