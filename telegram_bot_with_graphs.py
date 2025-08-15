@@ -49,14 +49,30 @@ class FinanceTrackerBotWithGraphs:
         
         # Инициализация Google Vision API
         try:
-            if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)), 
-                    'google-credentials.json'
-                )
-            
-            self.vision_client = vision.ImageAnnotatorClient()
-            logger.info("✅ Google Vision API подключен!")
+            # Сначала пробуем создать credentials из переменной GOOGLE_CREDENTIALS_CONTENT
+            credentials_content = os.environ.get('GOOGLE_CREDENTIALS_CONTENT')
+            if credentials_content:
+                print("🔧 Создаю credentials из GOOGLE_CREDENTIALS_CONTENT...")
+                import tempfile
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                    f.write(credentials_content)
+                    temp_credentials_path = f.name
+                    print(f"📝 Создан временный файл: {temp_credentials_path}")
+                
+                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_credentials_path
+                self.vision_client = vision.ImageAnnotatorClient()
+                print("✅ Google Vision API подключен через GOOGLE_CREDENTIALS_CONTENT!")
+            else:
+                # Fallback: проверяем GOOGLE_APPLICATION_CREDENTIALS
+                if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
+                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)), 
+                        'google-credentials.json'
+                    )
+                
+                self.vision_client = vision.ImageAnnotatorClient()
+                logger.info("✅ Google Vision API подключен!")
+                
         except Exception as e:
             logger.error(f"❌ Ошибка подключения к Google Vision: {e}")
             self.vision_client = None
