@@ -9,20 +9,9 @@ app = Flask(__name__)
 vision_client = None
 try:
     from google.cloud import vision
-    if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-        # Для Railway - создаем credentials из переменной окружения
-        credentials_content = os.environ.get('GOOGLE_CREDENTIALS_CONTENT')
-        if credentials_content:
-            import tempfile
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                f.write(credentials_content)
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = f.name
-            
-            vision_client = vision.ImageAnnotatorClient()
-            print("✅ Google Vision API подключен!")
-        else:
-            vision_client = vision.ImageAnnotatorClient()
-            print("✅ Google Vision API подключен!")
+    # Railway автоматически использует GOOGLE_APPLICATION_CREDENTIALS
+    vision_client = vision.ImageAnnotatorClient()
+    print("✅ Google Vision API подключен!")
 except Exception as e:
     print(f"❌ Ошибка подключения к Google Vision: {e}")
     vision_client = None
