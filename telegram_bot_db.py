@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
 """
-Telegram бот Finance Tracker с графиками
+Telegram бот Finance Tracker с базой данных
 """
 
 import os
 import logging
-import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from google.cloud import vision
-import json
-from datetime import datetime
 import re
-
-# Импортируем модели и функции из нашего приложения
-from models import create_session, Account, Transaction, SystemInfo, convert_to_usd
+from datetime import datetime
 
 # Настройка matplotlib для работы без GUI (headless mode)
 import matplotlib
@@ -22,7 +17,6 @@ matplotlib.use('Agg')  # Используем backend без GUI
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import io
-import base64
 from matplotlib import rcParams
 
 # Настройка matplotlib для корректной работы
@@ -33,9 +27,8 @@ rcParams['savefig.dpi'] = 150
 rcParams['savefig.bbox'] = 'tight'
 rcParams['savefig.pad_inches'] = 0.1
 
-# Настройка matplotlib для русского языка
-rcParams['font.family'] = 'DejaVu Sans'
-rcParams['font.size'] = 10
+# Импортируем модели и функции из нашего приложения
+from models import create_session, Account, Transaction, SystemInfo, convert_to_usd
 
 # Настройка логирования
 logging.basicConfig(
@@ -44,12 +37,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class FinanceTrackerBotWithGraphs:
+class FinanceTrackerBotDB:
     def __init__(self):
         """Инициализация бота"""
-        self.data_file = 'finance_data.json'
-        self.load_data()
-        
         # Инициализация Google Vision API
         try:
             # Сначала пробуем создать credentials из переменной GOOGLE_CREDENTIALS_CONTENT
@@ -66,21 +56,14 @@ class FinanceTrackerBotWithGraphs:
                 self.vision_client = vision.ImageAnnotatorClient()
                 print("✅ Google Vision API подключен через GOOGLE_CREDENTIALS_CONTENT!")
             else:
-                # Fallback: проверяем GOOGLE_APPLICATION_CREDENTIALS
-                if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)), 
-                        'google-credentials.json'
-                    )
-                
-                self.vision_client = vision.ImageAnnotatorClient()
-                logger.info("✅ Google Vision API подключен!")
+                print("❌ GOOGLE_CREDENTIALS_CONTENT не установлен")
+                self.vision_client = None
                 
         except Exception as e:
             logger.error(f"❌ Ошибка подключения к Google Vision: {e}")
             self.vision_client = None
         
-        # Паттерны для всех валют
+        # Паттерны для всех валют (те же, что и в веб-приложении)
         self.currency_patterns = {
             'RUB': [
                 r'(\d{1,3}(?:\s\d{3})*(?:,\d{2})?)\s*₽',
@@ -109,21 +92,6 @@ class FinanceTrackerBotWithGraphs:
                 r'(\d{1,3}(?:\s\d{3})*(?:\.\d{3})?)\s*рупий'
             ]
         }
-        
-        self.balance_keywords = [
-            'balance', 'total', 'available', 'current', 'main', 'cash',
-            'баланс', 'доступно', 'основной', 'текущий', 'общий', 'наличные'
-        ]
-
-    def load_data(self):
-        """Загружаем данные из базы данных"""
-        # Функция больше не нужна, данные загружаются по требованию
-        logger.info("✅ Используем базу данных")
-
-    def save_data(self):
-        """Сохраняем данные в базу данных"""
-        # Функция больше не нужна, данные сохраняются автоматически
-        logger.info("✅ Данные сохраняются в БД автоматически")
 
     def fix_russian_number_format(self, text, currency):
         """Исправляем формат российских чисел"""
@@ -141,8 +109,34 @@ class FinanceTrackerBotWithGraphs:
                     pass
         return None
 
-    def process_image(self, image_content):
-        """Обрабатываем изображение через Google Vision"""
+    def extract_balance_from_text(self, text_lines):
+        """Извлекаем баланс из распознанного текста"""
+        balances = []
+        
+        for text in text_lines:
+            text_lower = text.lower()
+            
+            for currency, patterns in self.currency_patterns.items():
+                for pattern in patterns:
+                    matches = re.findall(pattern, text, re.IGNORECASE)
+                    if matches:
+                        for match in matches:
+                            clean_number = match.replace(' ', '').replace(',', '')
+                            try:
+                                float(clean_number)
+                                balances.append({
+                                    'value': clean_number,
+                                    'currency': currency,
+                                    'original_text': text,
+                                    'pattern': pattern
+                                })
+                            except ValueError:
+                                continue
+        
+        return balances
+
+    def process_image_with_db(self, image_content):
+        """Обрабатываем изображение и сохраняем в БД"""
         if not self.vision_client:
             return {'success': False, 'error': 'Google Vision недоступен'}
         
@@ -169,16 +163,79 @@ class FinanceTrackerBotWithGraphs:
                         if corrected_number:
                             balance['value'] = corrected_number
                             balance['corrected'] = True
-            
-            if balances:
+                
                 main_balance = max(balances, key=lambda x: float(x['value']))
-                return {
-                    'success': True,
-                    'main_balance': main_balance,
-                    'all_balances': balances,
-                    'text_lines': text_lines,
-                    'full_text': full_text
-                }
+                
+                # Сохраняем в базу данных
+                session = create_session()
+                try:
+                    # Ищем существующий аккаунт по валюте
+                    account = session.query(Account).filter_by(
+                        currency=main_balance['currency']
+                    ).first()
+                    
+                    if not account:
+                        # Создаем новый аккаунт
+                        account_names = {
+                            'RUB': 'Российский счет',
+                            'USD': 'Долларовый счет',
+                            'EUR': 'Евро счет',
+                            'AED': 'Дирхамовый счет',
+                            'IDR': 'Рупиевый счет'
+                        }
+                        
+                        account_name = account_names.get(main_balance['currency'], f'Счет в {main_balance["currency"]}')
+                        
+                        account = Account(
+                            name=account_name,
+                            currency=main_balance['currency'],
+                            balance=0,
+                            balance_usd=0,
+                            last_updated=datetime.utcnow()
+                        )
+                        session.add(account)
+                        session.flush()  # Получаем ID
+                    
+                    # Обновляем баланс
+                    old_balance = account.balance
+                    account.balance = float(main_balance['value'])
+                    account.balance_usd = convert_to_usd(account.balance, account.currency)
+                    account.last_updated = datetime.utcnow()
+                    
+                    # Создаем транзакцию
+                    transaction = Transaction(
+                        account_id=account.id,
+                        timestamp=datetime.utcnow(),
+                        old_balance=old_balance,
+                        new_balance=account.balance,
+                        change=account.balance - old_balance,
+                        source='telegram',
+                        original_text=main_balance.get('original_text', '')
+                    )
+                    session.add(transaction)
+                    
+                    session.commit()
+                    
+                    return {
+                        'success': True,
+                        'main_balance': main_balance,
+                        'all_balances': balances,
+                        'account': {
+                            'id': account.id,
+                            'name': account.name,
+                            'currency': account.currency,
+                            'balance': account.balance,
+                            'balance_usd': account.balance_usd
+                        },
+                        'text_lines': text_lines,
+                        'full_text': full_text
+                    }
+                    
+                except Exception as e:
+                    session.rollback()
+                    raise e
+                finally:
+                    session.close()
             else:
                 return {
                     'success': False,
@@ -195,195 +252,37 @@ class FinanceTrackerBotWithGraphs:
                 'error': str(e)
             }
 
-    def extract_balance_from_text(self, text_lines):
-        """Извлекаем баланс из распознанного текста"""
-        balances = []
-        
-        for text in text_lines:
-            text_lower = text.lower()
-            
-            for currency, patterns in self.currency_patterns.items():
-                for pattern in patterns:
-                    matches = re.findall(pattern, text, re.IGNORECASE)
-                    if matches:
-                        for match in matches:
-                            clean_number = match.replace(' ', '').replace(',', '')
-                            try:
-                                float(clean_number)
-                                balances.append({
-                                    'value': clean_number,
-                                    'currency': currency,
-                                    'original_text': text,
-                                    'pattern': pattern
-                                })
-                            except ValueError:
-                                continue
-            
-            for keyword in self.balance_keywords:
-                if keyword in text_lower:
-                    for currency, patterns in self.currency_patterns.items():
-                        for pattern in patterns:
-                            matches = re.findall(pattern, text, re.IGNORECASE)
-                            if matches:
-                                for match in matches:
-                                    clean_number = match.replace(' ', '').replace(',', '')
-                                    try:
-                                        float(clean_number)
-                                        balances.append({
-                                            'value': clean_number,
-                                            'currency': currency,
-                                            'original_text': text,
-                                            'keyword': keyword,
-                                            'pattern': pattern
-                                        })
-                                    except ValueError:
-                                        continue
-        
-        return balances
-
-    def identify_account(self, balance_data, image_text):
-        """Определяем, какой это счет (теперь не нужна, работаем с БД)"""
-        # Функция больше не нужна, аккаунты создаются автоматически
-        return f"account_{balance_data['currency']}"
-
-    def update_account_balance(self, account_id, balance_data, source='telegram'):
-        """Обновляем баланс счета в БД"""
-        try:
-            session = create_session()
-            
-            # Ищем существующий аккаунт по валюте
-            account = session.query(Account).filter_by(
-                currency=balance_data['currency']
-            ).first()
-            
-            if not account:
-                # Создаем новый аккаунт
-                account_names = {
-                    'RUB': 'Российский счет',
-                    'USD': 'Долларовый счет',
-                    'EUR': 'Евро счет',
-                    'AED': 'Дирхамовый счет',
-                    'IDR': 'Рупиевый счет'
-                }
-                
-                account_name = account_names.get(balance_data['currency'], f'Счет в {balance_data["currency"]}')
-                
-                account = Account(
-                    name=account_name,
-                    currency=balance_data['currency'],
-                    balance=0,
-                    balance_usd=0,
-                    last_updated=datetime.utcnow()
-                )
-                session.add(account)
-                session.flush()  # Получаем ID
-            
-            # Обновляем баланс
-            old_balance = account.balance
-            account.balance = float(balance_data['value'])
-            account.balance_usd = convert_to_usd(account.balance, account.currency)
-            account.last_updated = datetime.utcnow()
-            
-            # Создаем транзакцию
-            transaction = Transaction(
-                account_id=account.id,
-                timestamp=datetime.utcnow(),
-                old_balance=old_balance,
-                new_balance=account.balance,
-                change=account.balance - old_balance,
-                source=source,
-                original_text=balance_data.get('original_text', '')
-            )
-            session.add(transaction)
-            
-            # Обновляем общий баланс в системной информации
-            system_info = session.query(SystemInfo).filter_by(key='total_balance_usd').first()
-            if system_info:
-                system_info.value = str(account.balance_usd)
-                system_info.updated_at = datetime.utcnow()
-            else:
-                system_info = SystemInfo(
-                    key='total_balance_usd',
-                    value=str(account.balance_usd),
-                    updated_at=datetime.utcnow()
-                )
-                session.add(system_info)
-            
-            session.commit()
-            
-            logger.info(f"✅ Обновлен баланс счета {account.id}: {account.balance} {account.currency} (${account.balance_usd:.2f})")
-            
-            return {
-                'id': len(account.transactions) + 1,
-                'timestamp': datetime.utcnow().isoformat(),
-                'old_balance': old_balance,
-                'new_balance': account.balance,
-                'change': account.balance - old_balance,
-                'source': source,
-                'original_text': balance_data.get('original_text', '')
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка обновления баланса: {e}")
-            session.rollback()
-            raise e
-        finally:
-            session.close()
-
-    def convert_to_usd(self, amount, currency):
-        """Конвертируем валюту в доллары"""
-        conversion_rates = {
-            'RUB': 0.011, 'USD': 1.0, 'EUR': 1.09, 'AED': 0.27, 'IDR': 0.000065
-        }
-        
-        if currency in conversion_rates:
-            return amount * conversion_rates[currency]
-        else:
-            return amount
-
-    def update_total_balance_usd(self):
-        """Обновляем общий баланс в долларах (теперь не нужна, работаем с БД)"""
-        # Функция больше не нужна, общий баланс рассчитывается автоматически
-        pass
-
     def get_accounts_summary(self):
         """Получаем сводку по всем счетам из БД"""
         try:
             session = create_session()
             accounts = session.query(Account).all()
             
-            accounts_data = {}
+            accounts_data = []
             total_balance_usd = 0
             
             for account in accounts:
-                accounts_data[f"account_{account.id}"] = {
+                accounts_data.append({
+                    'id': account.id,
                     'name': account.name,
                     'currency': account.currency,
                     'balance': account.balance,
                     'balance_usd': account.balance_usd,
-                    'last_updated': account.last_updated.isoformat() if account.last_updated else None,
-                    'transactions': []
-                }
+                    'last_updated': account.last_updated
+                })
                 total_balance_usd += account.balance_usd
-            
-            # Получаем предыдущий общий баланс из системной информации
-            system_info = session.query(SystemInfo).filter_by(key='total_balance_usd').first()
-            previous_total = float(system_info.value) if system_info else 0
-            
-            session.close()
             
             return {
                 'accounts': accounts_data,
                 'total_balance_usd': round(total_balance_usd, 2),
-                'previous_total_balance_usd': previous_total,
-                'total_balance_change': round(total_balance_usd - previous_total, 2),
-                'last_updated': datetime.utcnow().isoformat(),
                 'total_count': len(accounts_data)
             }
             
         except Exception as e:
             logger.error(f"❌ Ошибка получения сводки: {e}")
-            return {'accounts': {}, 'total_balance_usd': 0, 'total_count': 0}
+            return {'accounts': [], 'total_balance_usd': 0, 'total_count': 0}
+        finally:
+            session.close()
 
     def create_balance_chart(self):
         """Создаем график распределения по валютам"""
@@ -400,7 +299,7 @@ class FinanceTrackerBotWithGraphs:
             sizes = []
             colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']
             
-            for i, (account_id, account) in enumerate(accounts_data['accounts'].items()):
+            for i, account in enumerate(accounts_data['accounts']):
                 labels.append(account['name'])
                 sizes.append(account['balance_usd'])
             
@@ -420,10 +319,7 @@ class FinanceTrackerBotWithGraphs:
             
             # Добавляем общий баланс
             total_usd = accounts_data['total_balance_usd']
-            change = accounts_data['total_balance_change']
-            change_text = f"↗️ +${change:,.2f}" if change > 0 else f"↘️ {change:,.2f}" if change < 0 else "➡️ Без изменений"
-            
-            ax.text(0, -1.2, f'Общий баланс: ${total_usd:,.2f}\n{change_text}', 
+            ax.text(0, -1.2, f'Общий баланс: ${total_usd:,.2f}', 
                    ha='center', fontsize=14, fontweight='bold',
                    bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7))
             
@@ -439,71 +335,6 @@ class FinanceTrackerBotWithGraphs:
             
         except Exception as e:
             logger.error(f"❌ Ошибка создания графика: {e}")
-            # Закрываем фигуру в случае ошибки
-            try:
-                plt.close('all')
-            except:
-                pass
-            return None
-
-    def create_account_history_chart(self, account_id):
-        """Создаем график истории счета"""
-        try:
-            if account_id not in self.data['accounts']:
-                return None
-            
-            account = self.data['accounts'][account_id]
-            transactions = account.get('transactions', [])
-            
-            if not transactions:
-                return None
-            
-            # Сортируем транзакции по времени
-            sorted_transactions = sorted(transactions, key=lambda x: x['timestamp'])
-            
-            dates = [datetime.fromisoformat(t['timestamp']) for t in sorted_transactions]
-            balances = [t['new_balance'] for t in sorted_transactions]
-            changes = [t['change'] for t in sorted_transactions]
-            
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-            
-            # График баланса
-            ax1.plot(dates, balances, 'o-', linewidth=2, markersize=6, color='#36A2EB')
-            ax1.fill_between(dates, balances, alpha=0.3, color='#36A2EB')
-            ax1.set_title(f'Динамика баланса: {account["name"]}', fontsize=14, fontweight='bold')
-            ax1.set_ylabel(f'Баланс ({account["currency"]})', fontsize=12)
-            ax1.grid(True, alpha=0.3)
-            
-            # Форматирование дат
-            ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-            ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-            plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45)
-            
-            # График изменений
-            colors = ['green' if c > 0 else 'red' if c < 0 else 'gray' for c in changes]
-            ax2.bar(dates, changes, color=colors, alpha=0.7)
-            ax2.set_title('Изменения баланса', fontsize=14, fontweight='bold')
-            ax2.set_ylabel(f'Изменение ({account["currency"]})', fontsize=12)
-            ax2.grid(True, alpha=0.3)
-            
-            # Форматирование дат
-            ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-            ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-            plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45)
-            
-            plt.tight_layout()
-            
-            # Сохраняем в байты
-            img_buffer = io.BytesIO()
-            plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
-            img_buffer.seek(0)
-            plt.close(fig)
-            
-            return img_buffer
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка создания графика истории: {e}")
-            # Закрываем фигуру в случае ошибки
             try:
                 plt.close('all')
             except:
@@ -513,45 +344,38 @@ class FinanceTrackerBotWithGraphs:
     def create_total_balance_history_chart(self):
         """Создаем график общей динамики всех счетов в USD"""
         try:
-            accounts_data = self.get_accounts_summary()
+            session = create_session()
             
-            if not accounts_data['accounts']:
+            # Получаем все транзакции, отсортированные по времени
+            transactions = session.query(Transaction).order_by(Transaction.timestamp).all()
+            
+            if not transactions:
+                session.close()
                 return None
-            
-            # Собираем все транзакции по всем счетам
-            all_transactions = []
-            for account_id, account in accounts_data['accounts'].items():
-                for transaction in account.get('transactions', []):
-                    # Конвертируем в USD
-                    transaction_usd = {
-                        'timestamp': transaction['timestamp'],
-                        'balance_usd': transaction['new_balance'] * self.convert_to_usd(1, account['currency']),
-                        'account_name': account['name'],
-                        'currency': account['currency']
-                    }
-                    all_transactions.append(transaction_usd)
-            
-            if not all_transactions:
-                return None
-            
-            # Сортируем по времени
-            sorted_transactions = sorted(all_transactions, key=lambda x: x['timestamp'])
             
             # Группируем по дате и суммируем
             from collections import defaultdict
             daily_totals = defaultdict(float)
             
-            for transaction in sorted_transactions:
-                date = transaction['timestamp'][:10]  # Берем только дату
-                daily_totals[date] += transaction['balance_usd']
+            for transaction in transactions:
+                date = transaction.timestamp.date()
+                # Получаем аккаунт для конвертации в USD
+                account = session.query(Account).filter_by(id=transaction.account_id).first()
+                if account:
+                    # Используем текущий курс для конвертации
+                    transaction_usd = transaction.new_balance * convert_to_usd(1, account.currency)
+                    daily_totals[date] += transaction_usd
+            
+            if not daily_totals:
+                session.close()
+                return None
             
             # Сортируем даты
             dates = sorted(daily_totals.keys())
             totals = [daily_totals[date] for date in dates]
             
-            # Конвертируем строки дат в datetime объекты
-            from datetime import datetime
-            date_objects = [datetime.strptime(date, '%Y-%m-%d') for date in dates]
+            # Конвертируем даты в datetime объекты
+            date_objects = [datetime.combine(date, datetime.min.time()) for date in dates]
             
             fig, ax = plt.subplots(figsize=(12, 8))
             
@@ -570,11 +394,10 @@ class FinanceTrackerBotWithGraphs:
             plt.setp(ax.xaxis.get_majorticklabels(), rotation=45)
             
             # Добавляем текущий общий баланс
+            accounts_data = self.get_accounts_summary()
             current_total = accounts_data['total_balance_usd']
-            change = accounts_data['total_balance_change']
-            change_text = f"↗️ +${change:,.2f}" if change > 0 else f"↘️ {change:,.2f}" if change < 0 else "➡️ Без изменений"
             
-            ax.text(0.02, 0.98, f'Текущий баланс: ${current_total:,.2f}\n{change_text}', 
+            ax.text(0.02, 0.98, f'Текущий баланс: ${current_total:,.2f}', 
                    transform=ax.transAxes, fontsize=12, fontweight='bold',
                    bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7),
                    verticalalignment='top')
@@ -587,33 +410,33 @@ class FinanceTrackerBotWithGraphs:
             img_buffer.seek(0)
             plt.close(fig)
             
+            session.close()
             return img_buffer
             
         except Exception as e:
             logger.error(f"❌ Ошибка создания графика общей динамики: {e}")
-            # Закрываем фигуру в случае ошибки
             try:
                 plt.close('all')
             except:
                 pass
             return None
 
-# Создаем экземпляр трекера
-finance_tracker = FinanceTrackerBotWithGraphs()
+# Создаем экземпляр бота
+finance_bot = FinanceTrackerBotDB()
 
 # Обработчики команд
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
-    # Получаем текущие данные
-    accounts_data = finance_tracker.get_accounts_summary()
+    # Получаем текущие данные из БД
+    accounts_data = finance_bot.get_accounts_summary()
     
-    welcome_text = "💰 **Finance Tracker Bot с графиками**\n\n"
+    welcome_text = "💰 **Finance Tracker Bot с базой данных**\n\n"
     
     if accounts_data['total_count'] > 0:
         welcome_text += f"💵 **Общий баланс: ${accounts_data['total_balance_usd']:,.2f}**\n\n"
         welcome_text += "🏦 **Ваши счета:**\n"
         
-        for account_id, account in accounts_data['accounts'].items():
+        for account in accounts_data['accounts']:
             welcome_text += f"• {account['name']}: {account['balance']:,.2f} {account['currency']} (≈ ${account['balance_usd']:,.2f})\n"
         
         welcome_text += "\n📱 **Отправьте скриншот** для обновления баланса!"
@@ -622,13 +445,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     welcome_text += "\n\n📊 **Команды:**\n"
     welcome_text += "/balance - показать график распределения\n"
-    welcome_text += "/history - показать историю счетов\n"
+    welcome_text += "/history - показать общую динамику\n"
     welcome_text += "/help - справка"
     
     keyboard = [
-        [InlineKeyboardButton("📊 История счетов", callback_data="show_history")],
-        [InlineKeyboardButton("📈 График распределения", callback_data="show_balance_chart")],
-        [InlineKeyboardButton("📊 Общая динамика", callback_data="show_total_history")]
+        [InlineKeyboardButton("📊 График распределения", callback_data="show_balance_chart")],
+        [InlineKeyboardButton("📈 Общая динамика", callback_data="show_total_history")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -651,17 +473,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • Каждая валюта = отдельный счет
 • Баланс обновляется, а не суммируется
 • Все валюты конвертируются в доллары
+• Данные синхронизированы с веб-приложением
 
 📊 **Команды:**
 /start - начать работу с ботом
 /balance - показать график распределения
-/history - показать историю счетов
+/history - показать общую динамику
 /help - показать эту справку
 
 📈 **Функции:**
 • График распределения по валютам
-• История отдельных счетов
 • Общая динамика всех счетов в USD
+• Автоматическое распознавание балансов
 """
     
     await update.message.reply_text(help_text, parse_mode='Markdown')
@@ -670,7 +493,7 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /balance - показывает график"""
     await update.message.reply_text("🔄 Создаю график баланса...")
     
-    chart_buffer = finance_tracker.create_balance_chart()
+    chart_buffer = finance_bot.create_balance_chart()
     
     if chart_buffer:
         keyboard = [
@@ -689,28 +512,24 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /history"""
-    accounts_data = finance_tracker.get_accounts_summary()
+    await update.message.reply_text("🔄 Создаю график общей динамики...")
     
-    if accounts_data['total_count'] == 0:
-        await update.message.reply_text("📭 У вас пока нет счетов.\n\nОтправьте скриншот банковского приложения, чтобы создать первый счет!")
-        return
+    chart_buffer = finance_bot.create_total_balance_history_chart()
     
-    # Создаем список счетов для выбора
-    keyboard = []
-    for account_id, account in accounts_data['accounts'].items():
-        keyboard.append([InlineKeyboardButton(
-            f"📊 {account['name']} ({account['currency']})", 
-            callback_data=f"history_{account_id}"
-        )])
-    
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "📊 **Выберите счет для просмотра истории:**",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
+    if chart_buffer:
+        keyboard = [
+            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=chart_buffer,
+            caption="📊 Динамика общего баланса (все счета)\n\nОтправьте скриншот для обновления баланса!",
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text("❌ Не удалось создать график общей динамики.")
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик фотографий"""
@@ -722,45 +541,23 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         image_content = await file.download_as_bytearray()
         image_bytes = bytes(image_content)
         
-        result = finance_tracker.process_image(image_bytes)
+        result = finance_bot.process_image_with_db(image_bytes)
         
         if result['success']:
-            account_id = finance_tracker.identify_account(
-                result['main_balance'], 
-                result['full_text']
-            )
-            
-            transaction = finance_tracker.update_account_balance(
-                account_id,
-                result['main_balance'], 
-                source='telegram'
-            )
-            
-            main_balance = result['main_balance']
-            account = finance_tracker.data['accounts'][account_id]
+            account = result['account']
             
             success_text = f"✅ **Баланс обновлен!**\n\n"
             success_text += f"🏦 **Счет:** {account['name']}\n"
-            success_text += f"💰 **Новый баланс:** {main_balance['value']} ({main_balance['currency']})\n"
+            success_text += f"💰 **Новый баланс:** {account['balance']:,.2f} {account['currency']}\n"
             success_text += f"💵 **В долларах:** ${account['balance_usd']:,.2f}\n"
             
-            if transaction['change'] != 0:
-                change_emoji = "📈" if transaction['change'] > 0 else "📉"
-                change_text = f"+{transaction['change']:,.2f}" if transaction['change'] > 0 else f"{transaction['change']:,.2f}"
-                success_text += f"{change_emoji} **Изменение:** {change_text} {main_balance['currency']}\n"
-            
             # Обновляем общий баланс
-            accounts_data = finance_tracker.get_accounts_summary()
+            accounts_data = finance_bot.get_accounts_summary()
             success_text += f"\n💰 **Общий баланс:** ${accounts_data['total_balance_usd']:,.2f}"
-            
-            if accounts_data['total_balance_change'] != 0:
-                change = accounts_data['total_balance_change']
-                change_emoji = "↗️" if change > 0 else "↘️"
-                success_text += f"\n{change_emoji} **Изменение общего баланса:** ${change:,.2f}"
             
             keyboard = [
                 [InlineKeyboardButton("💰 Показать график", callback_data="show_balance_chart")],
-                [InlineKeyboardButton("📊 История", callback_data="show_history")]
+                [InlineKeyboardButton("📊 Общая динамика", callback_data="show_total_history")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -794,7 +591,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data == "show_balance_chart":
         await query.edit_message_text("🔄 Создаю график баланса...")
         
-        chart_buffer = finance_tracker.create_balance_chart()
+        chart_buffer = finance_bot.create_balance_chart()
         
         if chart_buffer:
             keyboard = [
@@ -812,33 +609,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("📭 У вас пока нет счетов.\n\nОтправьте скриншот банковского приложения, чтобы создать первый счет!")
     
-    elif query.data == "show_history":
-        accounts_data = finance_tracker.get_accounts_summary()
-        
-        if accounts_data['total_count'] == 0:
-            await query.edit_message_text("📭 У вас пока нет счетов.\n\nОтправьте скриншот банковского приложения, чтобы создать первый счет!")
-            return
-        
-        keyboard = []
-        for account_id, account in accounts_data['accounts'].items():
-            keyboard.append([InlineKeyboardButton(
-                f"📊 {account['name']} ({account['currency']})", 
-                callback_data=f"history_{account_id}"
-            )])
-        
-        keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "📊 **Выберите счет для просмотра истории:**",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-    
     elif query.data == "show_total_history":
         await query.edit_message_text("🔄 Создаю график общей динамики...")
         
-        chart_buffer = finance_tracker.create_total_balance_history_chart()
+        chart_buffer = finance_bot.create_total_balance_history_chart()
         
         if chart_buffer:
             keyboard = [
@@ -856,44 +630,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.edit_message_text("❌ Не удалось создать график общей динамики.")
     
-    elif query.data.startswith("history_"):
-        account_id = query.data.replace("history_", "")
-        await query.edit_message_text("🔄 Создаю график истории...")
-        
-        chart_buffer = finance_tracker.create_account_history_chart(account_id)
-        
-        if chart_buffer:
-            account = finance_tracker.data['accounts'][account_id]
-            caption = f"📊 **История счета: {account['name']}**\n\n"
-            caption += f"💰 Текущий баланс: {account['balance']:,.2f} {account['currency']}\n"
-            caption += f"💵 В долларах: ${account['balance_usd']:,.2f}"
-            
-            keyboard = [
-                [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await context.bot.send_photo(
-                chat_id=query.from_user.id,
-                photo=chart_buffer,
-                caption=caption,
-                reply_markup=reply_markup
-            )
-            await query.message.delete()
-        else:
-            await query.edit_message_text("❌ Не удалось создать график истории для этого счета.")
-    
     elif query.data == "back_to_main":
         # Получаем текущие данные для обновления главного меню
-        accounts_data = finance_tracker.get_accounts_summary()
+        accounts_data = finance_bot.get_accounts_summary()
         
-        welcome_text = "💰 **Finance Tracker Bot с графиками**\n\n"
+        welcome_text = "💰 **Finance Tracker Bot с базой данных**\n\n"
         
         if accounts_data['total_count'] > 0:
             welcome_text += f"💵 **Общий баланс: ${accounts_data['total_balance_usd']:,.2f}**\n\n"
             welcome_text += "🏦 **Ваши счета:**\n"
             
-            for account_id, account in accounts_data['accounts'].items():
+            for account in accounts_data['accounts']:
                 welcome_text += f"• {account['name']}: {account['balance']:,.2f} {account['currency']} (≈ ${account['balance_usd']:,.2f})\n"
             
             welcome_text += "\n📱 **Отправьте скриншот** для обновления баланса!"
@@ -902,7 +649,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         welcome_text += "\n\n📊 **Команды:**\n"
         welcome_text += "/balance - показать график распределения\n"
-        welcome_text += "/history - показать историю счетов\n"
+        welcome_text += "/history - показать общую динамику\n"
         welcome_text += "/help - справка"
         
         # Отправляем новое сообщение вместо редактирования
@@ -910,9 +657,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=query.from_user.id,
             text=welcome_text,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📊 История счетов", callback_data="show_history")],
-                [InlineKeyboardButton("📈 График распределения", callback_data="show_balance_chart")],
-                [InlineKeyboardButton("📊 Общая динамика", callback_data="show_total_history")]
+                [InlineKeyboardButton("📊 График распределения", callback_data="show_balance_chart")],
+                [InlineKeyboardButton("📈 Общая динамика", callback_data="show_total_history")]
             ]),
             parse_mode='Markdown'
         )
@@ -922,9 +668,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.delete()
         except:
             pass
-    
-    elif query.data == "help":
-        await help_command(update, context)
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик ошибок"""
@@ -960,7 +703,7 @@ def main():
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_error_handler(error_handler)
     
-    logger.info("🚀 Запуск Telegram бота Finance Tracker с графиками...")
+    logger.info("🚀 Запуск Telegram бота Finance Tracker с базой данных...")
     application.run_polling()
 
 if __name__ == '__main__':

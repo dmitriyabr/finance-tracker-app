@@ -1,202 +1,507 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finance Tracker - Отслеживание счетов</title>
+    <title>Finance Tracker Pro</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            padding: 30px;
+        }
+        
+        .total-balance {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 20px rgba(76, 175, 80, 0.3);
+        }
+        
+        .total-balance h1 {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .stats-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            border: none;
+            transition: transform 0.3s ease;
+        }
+        
+        .stats-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .upload-section {
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin: 20px 0;
+        }
+        
+        .form-control, .btn {
+            border-radius: 10px;
+            border: none;
+            padding: 12px 20px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #FF6B6B, #FF8E53);
+            border: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(255, 107, 107, 0.4);
+        }
+        
+        .account-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #4CAF50;
+            transition: all 0.3s ease;
+        }
+        
+        .account-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .balance-primary {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .balance-secondary {
+            font-size: 1rem;
+            color: #7f8c8d;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .message {
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            font-weight: bold;
+        }
+        
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
-    <div class="container mt-4">
-        <h1 class="text-center mb-4">💰 Finance Tracker</h1>
-        
-        <!-- Общий баланс -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card bg-primary text-white">
-                    <div class="card-body text-center">
-                        <h3>Общий баланс</h3>
-                        <h2 class="display-4">
-                            ${{ "{:,.2f}".format(total_balance_usd) }}
-                            {% if total_balance_change %}
-                                <span class="balance-change {{ 'text-success' if total_balance_change > 0 else 'text-danger' }}">
-                                    {{ '↗️' if total_balance_change > 0 else '↘️' }}
-                                </span>
-                            {% endif %}
-                        </h2>
-                        {% if last_updated %}
-                        <small>Обновлено: {{ last_updated[:10] }}</small>
-                        {% endif %}
+    <div class="container-fluid">
+        <div class="main-container">
+            <!-- Заголовок и общий баланс -->
+            <div class="total-balance">
+                <h1>$<span id="totalBalance">0.00</span></h1>
+                <p class="mb-0">Общий баланс всех счетов</p>
+                <div id="balanceChange" class="mt-2"></div>
+            </div>
+            
+            <!-- Статистика -->
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="stats-card text-center">
+                        <h3 id="totalAccounts">0</h3>
+                        <p class="text-muted mb-0">Всего счетов</p>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Графики -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>📊 Распределение по валютам</h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="currencyChart" width="400" height="300"></canvas>
+                <div class="col-md-4">
+                    <div class="stats-card text-center">
+                        <h3 id="totalTransactions">0</h3>
+                        <p class="text-muted mb-0">Всего транзакций</p>
                     </div>
                 </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>📈 Динамика общего баланса (USD)</h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="totalBalanceChart" width="400" height="300"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Загрузка изображения -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>📱 Загрузить скриншот</h5>
-                    </div>
-                    <div class="card-body">
-                        <form id="imageForm" enctype="multipart/form-data">
-                            <div class="mb-3">
-                                <input type="file" class="form-control" id="imageInput" name="image" accept="image/*" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary">🔍 Распознать баланс</button>
-                        </form>
+                <div class="col-md-4">
+                    <div class="stats-card text-center">
+                        <h3 id="lastUpdate">-</h3>
+                        <p class="text-muted mb-0">Последнее обновление</p>
                     </div>
                 </div>
             </div>
             
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>📊 Статистика</h5>
+            <!-- Загрузка изображения -->
+            <div class="upload-section">
+                <h3>📱 Загрузить скриншот банковского приложения</h3>
+                <div class="row">
+                    <div class="col-md-8">
+                        <input type="file" class="form-control" id="imageFile" accept="image/*">
                     </div>
-                    <div class="card-body">
-                        <p><strong>Всего счетов:</strong> {{ total_count }}</p>
-                        <p><strong>Последнее обновление:</strong> 
-                            {% if last_updated %}
-                                {{ last_updated[:19].replace('T', ' ') }}
-                            {% else %}
-                                Нет данных
-                            {% endif %}
-                        </p>
+                    <div class="col-md-4">
+                        <button class="btn btn-primary w-100" onclick="processImage()">
+                            🔍 Распознать баланс
+                        </button>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-outline-light" onclick="testAPI()">
+                        🧪 Тест API
+                    </button>
+                </div>
+                <div id="imageResult" class="mt-3"></div>
+            </div>
+            
+            <!-- Загрузка -->
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Обрабатываю изображение...</p>
+            </div>
+            
+            <!-- Графики -->
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="chart-container">
+                        <h4>Распределение по валютам</h4>
+                        <canvas id="currencyChart"></canvas>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="chart-container">
+                        <h4>История общего баланса</h4>
+                        <canvas id="totalBalanceChart"></canvas>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Счета -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>🏦 Ваши счета</h5>
-                    </div>
-                    <div class="card-body">
-                        {% if accounts %}
-                            <div class="row" id="accountsContainer">
-                                {% for account_id, account in accounts.items() %}
-                                <div class="col-md-6 col-lg-4 mb-3">
-                                    <div class="card h-100">
-                                        <div class="card-body">
-                                            <h6 class="card-title">{{ account.name }}</h6>
-                                            <div class="balance-info">
-                                                <div class="usd-balance">
-                                                    <strong>${{ "%.2f"|format(account.balance_usd) }}</strong>
-                                                </div>
-                                                <div class="local-balance text-muted">
-                                                    <small>{{ "%.2f"|format(account.balance) }} {{ account.currency }}</small>
-                                                </div>
-                                            </div>
-                                            {% if account.last_updated %}
-                                            <small class="text-muted">
-                                                Обновлено: {{ account.last_updated[:10] }}
-                                            </small>
-                                            {% endif %}
-                                            <div class="mt-2">
-                                                <button class="btn btn-sm btn-outline-primary" 
-                                                        onclick="showAccountHistory('{{ account_id }}')">
-                                                    📊 История
-                                                </button>
-                                                <button class="btn btn-sm btn-outline-info" 
-                                                        onclick="showAccountChart('{{ account_id }}')">
-                                                    📈 График
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        {% else %}
-                            <div class="text-center text-muted">
-                                <p>У вас пока нет счетов.</p>
-                                <p>Загрузите скриншот банковского приложения, чтобы создать первый счет!</p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Результат обработки -->
-        <div id="resultContainer" class="mt-4" style="display: none;">
-            <div class="card">
-                <div class="card-header">
-                    <h5>🔍 Результат распознавания</h5>
-                </div>
-                <div class="card-body" id="resultContent">
-                </div>
+            
+            <!-- Список счетов -->
+            <div class="chart-container">
+                <h4>🏦 Ваши счета</h4>
+                <div id="accountsList">Загрузка...</div>
             </div>
         </div>
     </div>
-
-    <!-- Модальное окно для истории счета -->
-    <div class="modal fade" id="accountHistoryModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">📊 История счета</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="accountHistoryContent">
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно для графика счета -->
-    <div class="modal fade" id="accountChartModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">📈 График счета</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <canvas id="accountChart" width="600" height="400"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- Данные для графиков -->
     <script>
-        window.accountsData = {{ accounts_json | safe }};
+        let accounts = [];
+        let currencyChart = null;
+        let totalBalanceChart = null;
+        
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAccounts();
+        });
+        
+        // Загрузка счетов
+        function loadAccounts() {
+            fetch('/api/accounts')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        accounts = data.accounts;
+                        updateDisplay(data);
+                        updateCharts();
+                    } else {
+                        showMessage('Ошибка загрузки счетов: ' + data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки счетов:', error);
+                    showMessage('Ошибка сети при загрузке счетов', 'error');
+                });
+        }
+        
+        // Обновление отображения
+        function updateDisplay(data) {
+            document.getElementById('totalBalance').textContent = formatNumber(data.total_balance_usd);
+            document.getElementById('totalAccounts').textContent = data.accounts.length;
+            document.getElementById('totalTransactions').textContent = getTotalTransactions();
+            
+            if (data.accounts.length > 0) {
+                const lastUpdate = new Date(Math.max(...data.accounts.map(a => new Date(a.last_updated))));
+                document.getElementById('lastUpdate').textContent = formatDate(lastUpdate);
+            }
+            
+            updateAccountsList(data.accounts);
+        }
+        
+        // Обновление списка счетов
+        function updateAccountsList(accountsData) {
+            const accountsList = document.getElementById('accountsList');
+            
+            if (accountsData.length === 0) {
+                accountsList.innerHTML = '<p class="text-muted">У вас пока нет счетов. Загрузите скриншот банковского приложения!</p>';
+                return;
+            }
+            
+            let html = '<div class="row">';
+            accountsData.forEach(account => {
+                html += `
+                    <div class="col-md-6">
+                        <div class="account-card">
+                            <h5>${account.name}</h5>
+                            <div class="balance-primary">$${formatNumber(account.balance_usd)}</div>
+                            <div class="balance-secondary">${formatNumber(account.balance)} ${account.currency}</div>
+                            <small class="text-muted">Обновлено: ${formatDate(new Date(account.last_updated))}</small>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            accountsList.innerHTML = html;
+        }
+        
+        // Обработка изображения
+        function processImage() {
+            const fileInput = document.getElementById('imageFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showMessage('Выберите изображение', 'error');
+                return;
+            }
+            
+            showLoading(true);
+            
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            fetch('/api/process_image', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                showLoading(false);
+                
+                if (data.success) {
+                    const balance = data.main_balance;
+                    showMessage(`✅ Найден баланс: ${formatNumber(balance.value)} ${balance.currency}`, 'success');
+                    
+                    // Перезагружаем счета
+                    loadAccounts();
+                } else {
+                    showMessage('❌ Ошибка: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showLoading(false);
+                console.error('Ошибка обработки изображения:', error);
+                showMessage('Ошибка сети при обработке изображения', 'error');
+            });
+        }
+        
+        // Обновление графиков
+        function updateCharts() {
+            updateCurrencyChart();
+            updateTotalBalanceChart();
+        }
+        
+        // График распределения по валютам
+        function updateCurrencyChart() {
+            const ctx = document.getElementById('currencyChart').getContext('2d');
+            
+            if (currencyChart) {
+                currencyChart.destroy();
+            }
+            
+            if (accounts.length === 0) return;
+            
+            const labels = accounts.map(a => a.name);
+            const data = accounts.map(a => a.balance_usd);
+            const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+            
+            currencyChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: colors.slice(0, data.length),
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+        
+        // График истории общего баланса
+        function updateTotalBalanceChart() {
+            const ctx = document.getElementById('totalBalanceChart').getContext('2d');
+            
+            if (totalBalanceChart) {
+                totalBalanceChart.destroy();
+            }
+            
+            if (accounts.length === 0) return;
+            
+            // Создаем простой график с текущими данными
+            const labels = accounts.map(a => a.currency);
+            const data = accounts.map(a => a.balance_usd);
+            
+            totalBalanceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Баланс в USD',
+                        data: data,
+                        backgroundColor: '#36A2EB',
+                        borderColor: '#2196F3',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Вспомогательные функции
+        function getTotalTransactions() {
+            return accounts.reduce((total, account) => total + (account.transactions ? account.transactions.length : 0), 0);
+        }
+        
+        function formatNumber(num) {
+            return new Intl.NumberFormat('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(num);
+        }
+        
+        function formatDate(date) {
+            return new Intl.DateTimeFormat('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(date);
+        }
+        
+        function showMessage(message, type) {
+            const resultDiv = document.getElementById('imageResult');
+            resultDiv.innerHTML = `<div class="message ${type}">${message}</div>`;
+            setTimeout(() => resultDiv.innerHTML = '', 5000);
+        }
+        
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+        
+        // Тест API
+        function testAPI() {
+            showMessage('🧪 Тестирую API...', 'success');
+            
+            // Тест 1: Health check
+            fetch('/health')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('✅ Health check:', data);
+                    showMessage('Health: OK', 'success');
+                })
+                .catch(error => {
+                    console.error('❌ Health check failed:', error);
+                    showMessage('Health: FAILED', 'error');
+                });
+            
+            // Тест 2: Vision status
+            fetch('/api/vision_status')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('✅ Vision status:', data);
+                    showMessage(`Vision: ${data.vision_available ? 'OK' : 'FAILED'}`, data.vision_available ? 'success' : 'error');
+                })
+                .catch(error => {
+                    console.error('❌ Vision status failed:', error);
+                    showMessage('Vision: FAILED', 'error');
+                });
+            
+            // Тест 3: Accounts
+            fetch('/api/accounts')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('✅ Accounts:', data);
+                    showMessage(`Accounts: ${data.accounts.length} счетов`, 'success');
+                })
+                .catch(error => {
+                    console.error('❌ Accounts failed:', error);
+                    showMessage('Accounts: FAILED', 'error');
+                });
+        }
     </script>
-    
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html> 
