@@ -185,31 +185,10 @@
                 </div>
             </div>
             
-            <!-- Загрузка изображения -->
-            <div class="upload-section">
-                <h3>📱 Загрузить скриншот банковского приложения</h3>
-                <div class="row">
-                    <div class="col-md-8">
-                        <input type="file" class="form-control" id="imageFile" accept="image/*">
-                    </div>
-                    <div class="col-md-4">
-                        <button class="btn btn-primary w-100" onclick="processImage()">
-                            🔍 Распознать баланс
-                        </button>
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <button class="btn btn-outline-light" onclick="testAPI()">
-                        🧪 Тест API
-                    </button>
-                </div>
-                <div id="imageResult" class="mt-3"></div>
-            </div>
-            
-            <!-- Загрузка -->
-            <div id="loading" class="loading">
-                <div class="spinner"></div>
-                <p>Обрабатываю изображение...</p>
+            <!-- Список счетов -->
+            <div class="chart-container">
+                <h4>🏦 Ваши счета</h4>
+                <div id="accountsList">Загрузка...</div>
             </div>
             
             <!-- Графики -->
@@ -228,10 +207,26 @@
                 </div>
             </div>
             
-            <!-- Список счетов -->
-            <div class="chart-container">
-                <h4>🏦 Ваши счета</h4>
-                <div id="accountsList">Загрузка...</div>
+            <!-- Загрузка изображения -->
+            <div class="upload-section">
+                <h3>📱 Загрузить скриншот банковского приложения</h3>
+                <div class="row">
+                    <div class="col-md-8">
+                        <input type="file" class="form-control" id="imageFile" accept="image/*">
+                    </div>
+                    <div class="col-md-4">
+                        <button class="btn btn-primary w-100" onclick="processImage()">
+                            🔍 Распознать баланс
+                        </button>
+                    </div>
+                </div>
+                <div id="imageResult" class="mt-3"></div>
+            </div>
+            
+            <!-- Загрузка -->
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>Обрабатываю изображение...</p>
             </div>
         </div>
     </div>
@@ -460,47 +455,6 @@
         
         function showLoading(show) {
             document.getElementById('loading').style.display = show ? 'block' : 'none';
-        }
-        
-        // Тест API
-        function testAPI() {
-            showMessage('🧪 Тестирую API...', 'success');
-            
-            // Тест 1: Health check
-            fetch('/health')
-                .then(response => response.json())
-                .then(data => {
-                    console.log('✅ Health check:', data);
-                    showMessage('Health: OK', 'success');
-                })
-                .catch(error => {
-                    console.error('❌ Health check failed:', error);
-                    showMessage('Health: FAILED', 'error');
-                });
-            
-            // Тест 2: Vision status
-            fetch('/api/vision_status')
-                .then(response => response.json())
-                .then(data => {
-                    console.log('✅ Vision status:', data);
-                    showMessage(`Vision: ${data.vision_available ? 'OK' : 'FAILED'}`, data.vision_available ? 'success' : 'error');
-                })
-                .catch(error => {
-                    console.error('❌ Vision status failed:', error);
-                    showMessage('Vision: FAILED', 'error');
-                });
-            
-            // Тест 3: Accounts
-            fetch('/api/accounts')
-                .then(response => response.json())
-                .then(data => {
-                    console.log('✅ Accounts:', data);
-                    showMessage(`Accounts: ${data.accounts.length} счетов`, 'success');
-                })
-                .catch(error => {
-                    console.error('❌ Accounts failed:', error);
-                    showMessage('Accounts: FAILED', 'error');
-                });
         }
     </script>
 </body>
