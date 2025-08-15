@@ -1,1 +1,1 @@
-bot: python create_tables_simple.py && python telegram_bot_with_graphs.py 
+bot: python run_migrations.py && python telegram_bot_with_graphs.py 
