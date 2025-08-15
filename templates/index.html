@@ -521,17 +521,30 @@
             currencies.forEach(currency => {
                 if (rates[currency]) {
                     const rate = rates[currency];
-                    const rateText = currency === 'USD' ? '1.00' : rate.toFixed(4);
-                    const rateLabel = currency === 'USD' ? 'USD' : `1 ${currency} = ${rateText} USD`;
-                    
-                    html += `
-                        <div class="col-md-2 col-6 mb-2">
-                            <div class="stats-card text-center">
-                                <h5>${currency}</h5>
-                                <p class="text-muted mb-0 small">${rateLabel}</p>
+                    if (currency === 'USD') {
+                        const rateLabel = '1 USD = 1.00 USD';
+                        html += `
+                            <div class="col-md-2 col-6 mb-2">
+                                <div class="stats-card text-center">
+                                    <h5>${currency}</h5>
+                                    <p class="text-muted mb-0 small">${rateLabel}</p>
+                                </div>
                             </div>
-                        </div>
-                    `;
+                        `;
+                    } else {
+                        // Инвертируем курс: 1 USD = rate валюты
+                        const invertedRate = 1 / rate;
+                        const rateLabel = `1 USD = ${invertedRate.toFixed(4)} ${currency}`;
+                        
+                        html += `
+                            <div class="col-md-2 col-6 mb-2">
+                                <div class="stats-card text-center">
+                                    <h5>${currency}</h5>
+                                    <p class="text-muted mb-0 small">${rateLabel}</p>
+                                </div>
+                            </div>
+                        `;
+                    }
                 }
             });
             html += '</div>';
