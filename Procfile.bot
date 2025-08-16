@@ -1,1 +1,0 @@
-bot: python run_migrations.py && python telegram_bot_with_graphs.py 
