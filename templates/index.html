@@ -46,17 +46,20 @@
                 </div>
                 <div class="col-md-3">
                     <div class="stats-card text-center">
-                        <button class="btn btn-sm btn-outline-primary" onclick="updateExchangeRates()">
-                            🔄 Обновить курсы
-                        </button>
-                        <p class="text-muted mb-0 mt-2">Курсы валют</p>
+                        <h3>-</h3>
+                        <p class="text-muted mb-0">Курсы валют</p>
                     </div>
                 </div>
             </div>
             
             <!-- Курсы валют -->
             <div class="chart-container">
-                <h4>💱 Текущие курсы валют</h4>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4>💱 Текущие курсы валют</h4>
+                    <button class="btn btn-sm btn-outline-primary" onclick="updateExchangeRates()">
+                        🔄 Обновить курсы
+                    </button>
+                </div>
                 <div id="exchangeRates">Загрузка курсов...</div>
             </div>
             
@@ -412,6 +415,16 @@
             });
             html += '</div>';
             
+            // Добавляем информацию о времени последнего обновления
+            const lastUpdate = new Date();
+            html += `
+                <div class="text-center mt-3">
+                    <small class="text-muted">
+                        Последнее обновление: ${getCurrentLocalTime()}
+                    </small>
+                </div>
+            `;
+            
             ratesDiv.innerHTML = html;
         }
         
@@ -456,13 +469,21 @@
         }
         
         function formatDate(date) {
+            // Автоматически определяем локальный часовой пояс пользователя
             return new Intl.DateTimeFormat('ru-RU', {
                 day: '2-digit',
                 month: '2-digit',
                 year: 'numeric',
                 hour: '2-digit',
-                minute: '2-digit'
+                minute: '2-digit',
+                timeZoneName: 'short'
             }).format(date);
+        }
+        
+        function getCurrentLocalTime() {
+            // Получаем текущее время в локальном часовом поясе
+            const now = new Date();
+            return formatDate(now);
         }
         
         function showMessage(message, type) {
