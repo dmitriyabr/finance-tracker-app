@@ -435,56 +435,28 @@ class FinanceTrackerCore:
             import matplotlib.pyplot as plt
             import matplotlib.dates as mdates
             import io
-            from collections import defaultdict
             
-            session = create_session()
-            accounts = session.query(Account).all()
+            # Используем ту же логику, что и get_balance_history
+            history_result = self.get_balance_history()
             
-            if not accounts:
-                session.close()
+            if not history_result['success'] or not history_result['history']:
                 return None
             
-            # Собираем все транзакции по всем счетам
-            all_transactions = []
-            for account in accounts:
-                transactions = session.query(Transaction).filter_by(account_id=account.id).order_by(Transaction.timestamp).all()
-                for transaction in transactions:
-                    # Конвертируем в USD
-                    transaction_usd = {
-                        'timestamp': transaction.timestamp,
-                        'balance_usd': transaction.new_balance * convert_to_usd(1, account.currency),
-                        'account_name': account.name,
-                        'currency': account.currency
-                    }
-                    all_transactions.append(transaction_usd)
+            # Получаем данные для графика
+            history_data = history_result['history']
             
-            session.close()
-            
-            if not all_transactions:
+            if len(history_data) == 0:
                 return None
-            
-            # Сортируем по времени
-            sorted_transactions = sorted(all_transactions, key=lambda x: x['timestamp'])
-            
-            # Группируем по дате и суммируем
-            daily_totals = defaultdict(float)
-            
-            for transaction in sorted_transactions:
-                date = transaction['timestamp'].strftime('%Y-%m-%d')  # Берем только дату
-                daily_totals[date] += transaction['balance_usd']
-            
-            # Сортируем даты
-            dates = sorted(daily_totals.keys())
-            totals = [daily_totals[date] for date in dates]
             
             # Конвертируем строки дат в datetime объекты
-            date_objects = [datetime.strptime(date, '%Y-%m-%d') for date in dates]
+            dates = [datetime.strptime(item['date'], '%Y-%m-%d') for item in history_data]
+            balances = [item['balance'] for item in history_data]
             
             fig, ax = plt.subplots(figsize=(12, 8))
             
             # График общей динамики
-            ax.plot(date_objects, totals, 'o-', linewidth=2, markersize=6, color='#36A2EB')
-            ax.fill_between(date_objects, totals, alpha=0.3, color='#36A2EB')
+            ax.plot(dates, balances, 'o-', linewidth=2, markersize=6, color='#36A2EB')
+            ax.fill_between(dates, balances, alpha=0.3, color='#36A2EB')
             
             ax.set_title('Динамика общего баланса (все счета)', fontsize=16, fontweight='bold')
             ax.set_ylabel('Общий баланс (USD)', fontsize=12)
@@ -497,7 +469,7 @@ class FinanceTrackerCore:
             plt.setp(ax.xaxis.get_majorticklabels(), rotation=45)
             
             # Получаем текущий общий баланс
-            current_total = sum(account.balance_usd for account in accounts)
+            current_total = balances[-1] if balances else 0
             
             ax.text(0.02, 0.98, f'Текущий баланс: ${current_total:,.2f}', 
                    transform=ax.transAxes, fontsize=12, fontweight='bold',
@@ -521,8 +493,6 @@ class FinanceTrackerCore:
                 plt.close('all')
             except:
                 pass
-            if 'session' in locals():
-                session.close()
             return None
 
 # Создаем глобальный экземпляр
