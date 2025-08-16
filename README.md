@@ -45,6 +45,7 @@ pip install -r requirements.txt
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="path/to/google-credentials.json"
 export TELEGRAM_BOT_TOKEN="your_bot_token"
+export WEB_APP_URL="https://your-railway-app.up.railway.app"
 ```
 
 4. Run the application:
@@ -80,6 +81,7 @@ python3 run_telegram_bot.py
 4. Set environment variables:
    - `GOOGLE_APPLICATION_CREDENTIALS`
    - `TELEGRAM_BOT_TOKEN`
+   - `WEB_APP_URL` (URL вашего веб-приложения на Railway)
 5. Deploy automatically
 
 ## 📱 Supported Banks

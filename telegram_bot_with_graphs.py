@@ -216,6 +216,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     accounts_data = finance_tracker.get_accounts_summary()
     accounts_details = finance_tracker.get_accounts_details()
     
+    # Получаем URL веб-приложения
+    web_app_url = os.environ.get('WEB_APP_URL', 'https://finance-tracker-app-production.up.railway.app')
+    
     welcome_text = "💰 **Finance Tracker Bot с графиками**\n\n"
     
     if accounts_data['accounts_count'] > 0:
@@ -234,10 +237,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text += "/history - показать историю счетов\n"
     welcome_text += "/help - справка"
     
+    # Добавляем ссылку на веб-приложение
+    welcome_text += f"\n\n🌐 **Веб-приложение:**\n"
+    welcome_text += f"Для красивого интерфейса с графиками: {web_app_url}"
+    
     keyboard = [
         [InlineKeyboardButton("📊 История счетов", callback_data="show_history")],
         [InlineKeyboardButton("📈 График распределения", callback_data="show_balance_chart")],
-        [InlineKeyboardButton("📊 Общая динамика", callback_data="show_total_history")]
+        [InlineKeyboardButton("📊 Общая динамика", callback_data="show_total_history")],
+        [InlineKeyboardButton("🌐 Открыть веб-приложение", url=web_app_url)]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -502,6 +510,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         accounts_data = finance_tracker.get_accounts_summary()
         accounts_details = finance_tracker.get_accounts_details()
         
+        # Получаем URL веб-приложения
+        web_app_url = os.environ.get('WEB_APP_URL', 'https://finance-tracker-app-production.up.railway.app')
+        
         welcome_text = "💰 **Finance Tracker Bot с графиками**\n\n"
         
         if accounts_data['accounts_count'] > 0:
@@ -520,6 +531,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         welcome_text += "/history - показать историю счетов\n"
         welcome_text += "/help - справка"
         
+        # Добавляем ссылку на веб-приложение
+        welcome_text += f"\n\n🌐 **Веб-приложение:**\n"
+        welcome_text += f"Для красивого интерфейса с графиками: {web_app_url}"
+        
         # Отправляем новое сообщение вместо редактирования
         await context.bot.send_message(
             chat_id=query.from_user.id,
@@ -527,7 +542,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("📊 История счетов", callback_data="show_history")],
                 [InlineKeyboardButton("📈 График распределения", callback_data="show_balance_chart")],
-                [InlineKeyboardButton("📊 Общая динамика", callback_data="show_total_history")]
+                [InlineKeyboardButton("📊 Общая динамика", callback_data="show_total_history")],
+                [InlineKeyboardButton("🌐 Открыть веб-приложение", url=web_app_url)]
             ]),
             parse_mode='Markdown'
         )
