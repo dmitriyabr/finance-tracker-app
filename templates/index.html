@@ -26,27 +26,21 @@
             
             <!-- Статистика -->
             <div class="row">
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <div class="stats-card text-center">
                         <h3 id="totalAccounts">0</h3>
                         <p class="text-muted mb-0">Всего счетов</p>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="stats-card text-center">
-                        <h3 id="totalTransactions">0</h3>
-                        <p class="text-muted mb-0">Всего транзакций</p>
-                    </div>
-                </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <div class="stats-card text-center">
                         <h3 id="lastUpdate">-</h3>
                         <p class="text-muted mb-0">Последнее обновление</p>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <div class="stats-card text-center">
-                        <h3>-</h3>
+                        <h3 id="exchangeRateUpdate">-</h3>
                         <p class="text-muted mb-0">Курсы валют</p>
                     </div>
                 </div>
@@ -54,11 +48,14 @@
             
             <!-- Курсы валют -->
             <div class="chart-container">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4>💱 Текущие курсы валют</h4>
-                    <button class="btn btn-sm btn-outline-primary" onclick="updateExchangeRates()">
-                        🔄 Обновить курсы
-                    </button>
+                <div class="row">
+                    <div class="col-md-2 col-6 mb-2">
+                        <div class="stats-card text-center">
+                            <button class="btn btn-sm btn-outline-primary w-100" onclick="updateExchangeRates()">
+                                🔄 Обновить курсы
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div id="exchangeRates">Загрузка курсов...</div>
             </div>
@@ -138,7 +135,6 @@
         function updateDisplay(data) {
             document.getElementById('totalBalance').textContent = formatNumber(data.total_balance_usd);
             document.getElementById('totalAccounts').textContent = data.accounts.length;
-            document.getElementById('totalTransactions').textContent = getTotalTransactions();
             
             if (data.accounts.length > 0) {
                 // Находим самое последнее обновление среди всех счетов
@@ -415,15 +411,9 @@
             });
             html += '</div>';
             
-            // Добавляем информацию о времени последнего обновления
+            // Обновляем дату в блоке статистики
             const lastUpdate = new Date();
-            html += `
-                <div class="text-center mt-3">
-                    <small class="text-muted">
-                        Последнее обновление: ${getCurrentLocalTime()}
-                    </small>
-                </div>
-            `;
+            document.getElementById('exchangeRateUpdate').textContent = formatDate(lastUpdate);
             
             ratesDiv.innerHTML = html;
         }
@@ -457,10 +447,6 @@
         }
         
         // Вспомогательные функции
-        function getTotalTransactions() {
-            return accounts.reduce((total, account) => total + (account.transactions ? account.transactions.length : 0), 0);
-        }
-        
         function formatNumber(num) {
             return new Intl.NumberFormat('en-US', {
                 minimumFractionDigits: 2,
