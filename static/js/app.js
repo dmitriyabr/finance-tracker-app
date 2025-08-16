@@ -667,16 +667,14 @@ function createAccountChart(historyData) {
     
     const labels = [];
     const balanceData = [];
-    const changeData = [];
     
     for (const transaction of sortedTransactions) {
         const date = new Date(transaction.timestamp).toLocaleDateString('ru-RU');
         labels.push(date);
         balanceData.push(transaction.new_balance);
-        changeData.push(transaction.change);
     }
     
-    // Создаем график
+    // Создаем график только для баланса
     accountChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -688,20 +686,8 @@ function createAccountChart(historyData) {
                     borderColor: '#36A2EB',
                     backgroundColor: 'rgba(54, 162, 235, 0.1)',
                     borderWidth: 3,
-                    fill: false,
-                    tension: 0.4,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Изменение',
-                    data: changeData,
-                    borderColor: '#FF6384',
-                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.4,
-                    yAxisID: 'y1',
-                    hidden: true
+                    fill: true,
+                    tension: 0.4
                 }
             ]
         },
@@ -736,18 +722,6 @@ function createAccountChart(historyData) {
                     title: {
                         display: true,
                         text: `Баланс (${account.currency})`
-                    }
-                },
-                y1: {
-                    type: 'linear',
-                    display: false,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Изменение'
-                    },
-                    grid: {
-                        drawOnChartArea: false
                     }
                 }
             }

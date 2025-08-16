@@ -163,33 +163,22 @@ class FinanceTrackerBotWithGraphs:
             
             dates = [t.timestamp for t in sorted_transactions]
             balances = [t.new_balance for t in sorted_transactions]
-            changes = [t.change for t in sorted_transactions]
             
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+            # Создаем один график вместо двух
+            fig, ax = plt.subplots(figsize=(12, 8))
             
             # График баланса
-            ax1.plot(dates, balances, 'o-', linewidth=2, markersize=6, color='#36A2EB')
-            ax1.fill_between(dates, balances, alpha=0.3, color='#36A2EB')
-            ax1.set_title(f'Динамика баланса: {account.name}', fontsize=14, fontweight='bold')
-            ax1.set_ylabel(f'Баланс ({account.currency})', fontsize=12)
-            ax1.grid(True, alpha=0.3)
+            ax.plot(dates, balances, 'o-', linewidth=2, markersize=6, color='#36A2EB')
+            ax.fill_between(dates, balances, alpha=0.3, color='#36A2EB')
+            ax.set_title(f'Динамика баланса: {account.name}', fontsize=16, fontweight='bold')
+            ax.set_ylabel(f'Баланс ({account.currency})', fontsize=12)
+            ax.set_xlabel('Дата', fontsize=12)
+            ax.grid(True, alpha=0.3)
             
             # Форматирование дат
-            ax1.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-            ax1.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-            plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45)
-            
-            # График изменений
-            colors = ['green' if c > 0 else 'red' if c < 0 else 'gray' for c in changes]
-            ax2.bar(dates, changes, color=colors, alpha=0.7)
-            ax2.set_title('Изменения баланса', fontsize=14, fontweight='bold')
-            ax2.set_ylabel(f'Изменение ({account.currency})', fontsize=12)
-            ax2.grid(True, alpha=0.3)
-            
-            # Форматирование дат
-            ax2.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-            ax2.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-            plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45)
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
+            ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45)
             
             plt.tight_layout()
             
