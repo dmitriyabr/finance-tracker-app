@@ -5,16 +5,12 @@ Telegram бот Finance Tracker с графиками
 
 import os
 import logging
-import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from google.cloud import vision
-import json
 from datetime import datetime
-import re
 
-# Импортируем модели и функции из нашего приложения
-from models import create_session, Account, Transaction, SystemInfo, convert_to_usd
+# Импортируем общую логику
+from core import finance_tracker_core
 
 # Настройка matplotlib для работы без GUI (headless mode)
 import matplotlib
@@ -22,7 +18,6 @@ matplotlib.use('Agg')  # Используем backend без GUI
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import io
-import base64
 from matplotlib import rcParams
 
 # Настройка matplotlib для корректной работы
@@ -47,241 +42,40 @@ logger = logging.getLogger(__name__)
 class FinanceTrackerBotWithGraphs:
     def __init__(self):
         """Инициализация бота"""
-        # Инициализация Google Vision API
-        try:
-            # Сначала пробуем создать credentials из переменной GOOGLE_CREDENTIALS_CONTENT
-            credentials_content = os.environ.get('GOOGLE_CREDENTIALS_CONTENT')
-            if credentials_content:
-                print("🔧 Создаю credentials из GOOGLE_CREDENTIALS_CONTENT...")
-                import tempfile
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
-                    f.write(credentials_content)
-                    temp_credentials_path = f.name
-                    print(f"📝 Создан временный файл: {temp_credentials_path}")
-                
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_credentials_path
-                self.vision_client = vision.ImageAnnotatorClient()
-                print("✅ Google Vision API подключен через GOOGLE_CREDENTIALS_CONTENT!")
-            else:
-                # Fallback: проверяем GOOGLE_APPLICATION_CREDENTIALS
-                if not os.environ.get('GOOGLE_APPLICATION_CREDENTIALS'):
-                    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)), 
-                        'google-credentials.json'
-                    )
-                
-                self.vision_client = vision.ImageAnnotatorClient()
-                logger.info("✅ Google Vision API подключен!")
-                
-        except Exception as e:
-            logger.error(f"❌ Ошибка подключения к Google Vision: {e}")
-            self.vision_client = None
-        
-        # Паттерны для всех валют
-        self.currency_patterns = {
-            'RUB': [
-                r'(\d{1,3}(?:\s\d{3})*(?:,\d{2})?)\s*₽',
-                r'(\d{1,3}(?:\s\d{3})*(?:,\d{2})?)\s*Р',
-                r'(\d{1,3}(?:\s\d{3})*(?:\.\d{2})?)\s*руб',
-                r'(\d{1,3}(?:\s\d{3})*(?:,\d{2})?)\s*рубл'
-            ],
-            'USD': [
-                r'(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*\$',
-                r'(\d{1,3}(?:\s\d{3})*(?:\.\d{2})?)\s*USD',
-                r'\$(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
-            ],
-            'EUR': [
-                r'(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*€',
-                r'(\d{1,3}(?:\s\d{3})*(?:\.\d{2})?)\s*EUR',
-                r'€(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)'
-            ],
-            'AED': [
-                r'(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*AED',
-                r'(\d{1,3}(?:\s\d{3})*(?:\.\d{2})?)\s*дирхам',
-                r'(\d{1,3}(?:\s\d{3})*(?:\.\d{2})?)\s*د\.إ'
-            ],
-            'IDR': [
-                r'Rp\s*(\d{1,3}(?:,\d{3})*(?:\.\d{3})?)',
-                r'(\d{1,3}(?:,\d{3})*(?:\.\d{3})?)\s*Rp',
-                r'(\d{1,3}(?:\s\d{3})*(?:\.\d{3})?)\s*рупий'
-            ]
-        }
-        
-        self.balance_keywords = [
-            'balance', 'total', 'available', 'current', 'main', 'cash',
-            'баланс', 'доступно', 'основной', 'текущий', 'общий', 'наличные'
-        ]
-
-    def fix_russian_number_format(self, text, currency):
-        """Исправляем формат российских чисел"""
-        if currency == 'RUB':
-            russian_pattern = r'(\d{1,3}(?:\s\d{3})*),(\d{2})'
-            match = re.search(russian_pattern, text)
-            if match:
-                whole_part = match.group(1).replace(' ', '').replace(',', '')
-                decimal_part = match.group(2)
-                correct_number = f"{whole_part}.{decimal_part}"
-                try:
-                    float(correct_number)
-                    return correct_number
-                except ValueError:
-                    pass
-        return None
+        # Используем общую логику из core.py
+        self.vision_client = finance_tracker_core.vision_client
+        self.currency_patterns = finance_tracker_core.currency_patterns
+        self.balance_keywords = finance_tracker_core.balance_keywords
 
     def process_image(self, image_content):
         """Обрабатываем изображение через Google Vision"""
-        if not self.vision_client:
-            return {'success': False, 'error': 'Google Vision недоступен'}
-        
-        try:
-            image = vision.Image(content=image_content)
-            response = self.vision_client.text_detection(image=image)
-            texts = response.text_annotations
-            
-            if not texts:
-                return {'success': False, 'error': 'Текст не найден'}
-            
-            full_text = texts[0].description
-            text_lines = full_text.split('\n')
-            
-            balances = self.extract_balance_from_text(text_lines)
-            
-            if balances:
-                for balance in balances:
-                    if balance['currency'] == 'RUB':
-                        corrected_number = self.fix_russian_number_format(
-                            balance['original_text'], 
-                            balance['currency']
-                        )
-                        if corrected_number:
-                            balance['value'] = corrected_number
-                            balance['corrected'] = True
-            
-            if balances:
-                main_balance = max(balances, key=lambda x: float(x['value']))
-                return {
-                    'success': True,
-                    'main_balance': main_balance,
-                    'all_balances': balances,
-                    'text_lines': text_lines,
-                    'full_text': full_text
-                }
-            else:
-                return {
-                    'success': False,
-                    'balance': None,
-                    'text_lines': text_lines,
-                    'full_text': full_text
-                }
-                
-        except Exception as e:
-            logger.error(f"❌ Ошибка при обработке изображения: {e}")
-            return {
-                'success': False,
-                'balance': None,
-                'error': str(e)
-            }
+        return finance_tracker_core.process_image(image_content)
 
     def extract_balance_from_text(self, text_lines):
         """Извлекаем баланс из распознанного текста"""
-        balances = []
-        
-        for text in text_lines:
-            text_lower = text.lower()
-            
-            for currency, patterns in self.currency_patterns.items():
-                for pattern in patterns:
-                    matches = re.findall(pattern, text, re.IGNORECASE)
-                    if matches:
-                        for match in matches:
-                            clean_number = match.replace(' ', '').replace(',', '')
-                            try:
-                                float(clean_number)
-                                balances.append({
-                                    'value': clean_number,
-                                    'currency': currency,
-                                    'original_text': text,
-                                    'pattern': pattern
-                                })
-                            except ValueError:
-                                continue
-            
-            for keyword in self.balance_keywords:
-                if keyword in text_lower:
-                    for currency, patterns in self.currency_patterns.items():
-                        for pattern in patterns:
-                            matches = re.findall(pattern, text, re.IGNORECASE)
-                            if matches:
-                                for match in matches:
-                                    clean_number = match.replace(' ', '').replace(',', '')
-                                    try:
-                                        float(clean_number)
-                                        balances.append({
-                                            'value': clean_number,
-                                            'currency': currency,
-                                            'original_text': text,
-                                            'keyword': keyword,
-                                            'pattern': pattern
-                                        })
-                                    except ValueError:
-                                        continue
-        
-        return balances
+        return finance_tracker_core.extract_balance_from_text(text_lines)
+
+    def fix_russian_number_format(self, text, currency):
+        """Исправляем формат российских чисел"""
+        return finance_tracker_core.fix_russian_number_format(text, currency)
 
     def get_accounts_summary(self):
         """Получает сводку по всем счетам"""
-        try:
-            session = create_session()
-            accounts = session.query(Account).all()
-            
-            total_balance_usd = sum(account.balance_usd for account in accounts)
-            
-            # Получаем изменение общего баланса (пока упрощенно)
-            total_balance_change = 0  # В будущем можно добавить логику расчета изменений
-            
-            return {
-                'total_balance_usd': total_balance_usd,
-                'total_balance_change': total_balance_change,
-                'accounts_count': len(accounts)
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка получения сводки по счетам: {e}")
-            return {
-                'total_balance_usd': 0,
-                'total_balance_change': 0,
-                'accounts_count': 0
-            }
-        finally:
-            session.close()
+        return finance_tracker_core.get_accounts_summary()
 
     def get_accounts_details(self):
         """Получает детальную информацию по всем счетам"""
-        try:
-            session = create_session()
-            accounts = session.query(Account).all()
-            
-            accounts_details = {}
-            for account in accounts:
-                accounts_details[account.id] = {
-                    'name': account.name,
-                    'currency': account.currency,
-                    'balance': account.balance,
-                    'balance_usd': account.balance_usd,
-                    'last_updated': account.last_updated.isoformat() if account.last_updated else None
-                }
-            
-            return accounts_details
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка получения деталей по счетам: {e}")
-            return {}
-        finally:
-            session.close()
+        return finance_tracker_core.get_accounts_details()
+
+    def update_account_balance_from_image(self, balance_data, image_text, source='telegram'):
+        """Обновляем баланс счета в БД на основе распознанного изображения"""
+        return finance_tracker_core.update_account_balance_from_image(balance_data, image_text, source)
 
     def create_balance_chart(self):
         """Создаем график распределения по валютам"""
         try:
+            from models import create_session, Account
+            
             session = create_session()
             accounts = session.query(Account).all()
             
@@ -348,6 +142,8 @@ class FinanceTrackerBotWithGraphs:
         """Создаем график истории счета"""
         try:
             # Получаем данные из базы данных
+            from models import create_session, Account, Transaction
+            
             session = create_session()
             account = session.query(Account).filter_by(id=account_id).first()
             
@@ -419,186 +215,7 @@ class FinanceTrackerBotWithGraphs:
 
     def create_total_balance_history_chart(self):
         """Создаем график общей динамики всех счетов в USD"""
-        try:
-            session = create_session()
-            accounts = session.query(Account).all()
-            
-            if not accounts:
-                session.close()
-                return None
-            
-            # Собираем все транзакции по всем счетам
-            all_transactions = []
-            for account in accounts:
-                transactions = session.query(Transaction).filter_by(account_id=account.id).order_by(Transaction.timestamp).all()
-                for transaction in transactions:
-                    # Конвертируем в USD
-                    transaction_usd = {
-                        'timestamp': transaction.timestamp,
-                        'balance_usd': transaction.new_balance * convert_to_usd(1, account.currency),
-                        'account_name': account.name,
-                        'currency': account.currency
-                    }
-                    all_transactions.append(transaction_usd)
-            
-            session.close()
-            
-            if not all_transactions:
-                return None
-            
-            # Сортируем по времени
-            sorted_transactions = sorted(all_transactions, key=lambda x: x['timestamp'])
-            
-            # Группируем по дате и суммируем
-            from collections import defaultdict
-            daily_totals = defaultdict(float)
-            
-            for transaction in sorted_transactions:
-                date = transaction['timestamp'].strftime('%Y-%m-%d')  # Берем только дату
-                daily_totals[date] += transaction['balance_usd']
-            
-            # Сортируем даты
-            dates = sorted(daily_totals.keys())
-            totals = [daily_totals[date] for date in dates]
-            
-            # Конвертируем строки дат в datetime объекты
-            from datetime import datetime
-            date_objects = [datetime.strptime(date, '%Y-%m-%d') for date in dates]
-            
-            fig, ax = plt.subplots(figsize=(12, 8))
-            
-            # График общей динамики
-            ax.plot(date_objects, totals, 'o-', linewidth=2, markersize=6, color='#36A2EB')
-            ax.fill_between(date_objects, totals, alpha=0.3, color='#36A2EB')
-            
-            ax.set_title('Динамика общего баланса (все счета)', fontsize=16, fontweight='bold')
-            ax.set_ylabel('Общий баланс (USD)', fontsize=12)
-            ax.set_xlabel('Дата', fontsize=12)
-            ax.grid(True, alpha=0.3)
-            
-            # Форматирование дат
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%d.%m'))
-            ax.xaxis.set_major_locator(mdates.DayLocator(interval=1))
-            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45)
-            
-            # Получаем текущий общий баланс
-            current_total = sum(account.balance_usd for account in accounts)
-            
-            ax.text(0.02, 0.98, f'Текущий баланс: ${current_total:,.2f}', 
-                   transform=ax.transAxes, fontsize=12, fontweight='bold',
-                   bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.7),
-                   verticalalignment='top')
-            
-            plt.tight_layout()
-            
-            # Сохраняем в байты
-            img_buffer = io.BytesIO()
-            plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
-            img_buffer.seek(0)
-            plt.close(fig)
-            
-            return img_buffer
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка создания графика общей динамики: {e}")
-            # Закрываем фигуру в случае ошибки
-            try:
-                plt.close('all')
-            except:
-                pass
-            if 'session' in locals():
-                session.close()
-            return None
-
-    def update_account_balance_from_image(self, balance_data, image_text, source='telegram'):
-        """Обновляем баланс счета в БД на основе распознанного изображения"""
-        try:
-            session = create_session()
-            
-            # Ищем существующий аккаунт по валюте
-            account = session.query(Account).filter_by(
-                currency=balance_data['currency']
-            ).first()
-            
-            if not account:
-                # Создаем новый аккаунт
-                account_names = {
-                    'RUB': 'Российский счет',
-                    'USD': 'Долларовый счет',
-                    'EUR': 'Евро счет',
-                    'AED': 'Дирхамовый счет',
-                    'IDR': 'Рупиевый счет'
-                }
-                
-                account_name = account_names.get(balance_data['currency'], f'Счет в {balance_data["currency"]}')
-                
-                account = Account(
-                    name=account_name,
-                    currency=balance_data['currency'],
-                    balance=0,
-                    balance_usd=0,
-                    last_updated=datetime.utcnow()
-                )
-                session.add(account)
-                session.flush()  # Получаем ID
-            
-            # Обновляем баланс
-            old_balance = account.balance
-            account.balance = float(balance_data['value'])
-            account.balance_usd = convert_to_usd(account.balance, account.currency)
-            account.last_updated = datetime.utcnow()
-            
-            # Создаем транзакцию
-            transaction = Transaction(
-                account_id=account.id,
-                timestamp=datetime.utcnow(),
-                old_balance=old_balance,
-                new_balance=account.balance,
-                change=account.balance - old_balance,
-                source=source,
-                original_text=image_text # Используем распознанный текст
-            )
-            session.add(transaction)
-            
-            # Обновляем общий баланс в системной информации
-            system_info = session.query(SystemInfo).filter_by(key='total_balance_usd').first()
-            if system_info:
-                system_info.value = str(account.balance_usd)
-                system_info.updated_at = datetime.utcnow()
-            else:
-                system_info = SystemInfo(
-                    key='total_balance_usd',
-                    value=str(account.balance_usd),
-                    updated_at=datetime.utcnow()
-                )
-                session.add(system_info)
-            
-            session.commit()
-            
-            logger.info(f"✅ Обновлен баланс счета {account.id}: {account.balance} {account.currency} (${account.balance_usd:.2f})")
-            
-            return {
-                'success': True,
-                'account': {
-                    'id': account.id,
-                    'name': account.name,
-                    'currency': account.currency,
-                    'balance': account.balance,
-                    'balance_usd': account.balance_usd,
-                    'last_updated': account.last_updated.isoformat()
-                },
-                'change': account.balance - old_balance
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка обновления баланса из изображения: {e}")
-            session.rollback()
-            return {
-                'success': False,
-                'error': str(e)
-            }
-        finally:
-            session.close()
+        return finance_tracker_core.create_total_balance_history_chart()
 
 # Создаем экземпляр трекера
 finance_tracker = FinanceTrackerBotWithGraphs()
@@ -755,11 +372,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # Получаем общий баланс
                 accounts_summary = finance_tracker.get_accounts_summary()
                 success_text += f"\n💰 **Общий баланс:** ${accounts_summary['total_balance_usd']:,.2f}"
-                
-                if accounts_summary.get('total_balance_change', 0) != 0:
-                    change = accounts_summary['total_balance_change']
-                    change_emoji = "↗️" if change > 0 else "↘️"
-                    success_text += f"\n{change_emoji} **Изменение общего баланса:** ${change:,.2f}"
                 
                 keyboard = [
                     [InlineKeyboardButton("💰 Показать график", callback_data="show_balance_chart")],
